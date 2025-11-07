@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>KeyForge Errata Loader</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="https://www.keyforgemastervault.com/favicon.ico">
+  <!-- No favicon to avoid errors -->
   <meta name="theme-color" content="#111111">
   <style>
     :root { --bg: #111; --text: #eee; --accent: #0066cc; --errata: #ff4444; }
@@ -30,6 +29,7 @@
     .loading { text-align:center; color:#aaa; }
     .hidden { display:none; }
     #status { text-align:center; color:#aaa; margin:10px 0; font-weight:600; }
+    .error { color:#f88; }
   </style>
 </head>
 <body>
@@ -56,8 +56,9 @@
     const deckDetail = document.getElementById('deck-detail');
     const usernameInput = document.getElementById('username');
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
+    const CORS_PROXY = 'https://corsproxy.io/?';  // Free CORS bypass
 
-    // Full Errata Database (text-only for mobile)
+    // Full Errata Database
     const ERRATA = {
       "Arcenomometer": "Enhance two. Action: During your opponent’s next turn, each time they play a card, they lose 1 Aember.",
       "Auto-Legionary": "Action: Put Auto-Legionary on a flank of your battleline. While in the battleline, it is considered a creature with 5 power and may be used as if it belonged to the active house.",
@@ -92,23 +93,41 @@
       "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
     };
 
+    async function fetchWithProxy(url, options = {}) {
+      const proxiedUrl = CORS_PROXY + encodeURIComponent(url);
+      try {
+        const res = await fetch(proxiedUrl, {
+          ...options,
+          headers: {
+            ...options.headers,
+            'Api-Key': API_KEY  // Proxy passes this through
+          }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res;
+      } catch (e) {
+        throw new Error(`Fetch failed: ${e.message}`);
+      }
+    }
+
     async function loadUserDecks() {
       const username = usernameInput.value.trim();
       if (!username) return status.textContent = 'Enter a username';
 
       status.textContent = 'Loading decks...';
+      status.className = '';
       decksList.style.display = 'block';
       document.getElementById('decks').innerHTML = '';
 
       try {
-        // Fetch decks for user (max per_page=100)
-        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks?owner=${encodeURIComponent(username)}&per_page=100`, {
-          headers: { 'Api-Key': API_KEY }
-        });
+        // Proxy the API call
+        const res = await fetchWithProxy(`https://decksofkeyforge.com/public-api/v3/decks?owner=${encodeURIComponent(username)}&per_page=100`);
         const data = await res.json();
 
         if (!data.decks || data.decks.length === 0) {
-          document.getElementById('user-decks-count').textContent = 'No decks found';
+          document.getElementById('user-decks-count').textContent = 'No decks found for this user.';
+          status.textContent = 'Try importing decks to DoK via Master Vault.';
+          status.className = 'error';
           return;
         }
 
@@ -123,7 +142,9 @@
 
         status.textContent = 'Tap a deck to view cards';
       } catch (e) {
-        status.textContent = 'Error loading decks';
+        document.getElementById('user-decks-count').textContent = 'Load failed';
+        status.textContent = `Error: ${e.message}. Check username or API key.`;
+        status.className = 'error';
         console.error(e);
       }
     }
@@ -135,9 +156,7 @@
       document.getElementById('cards').innerHTML = '';
 
       try {
-        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
-          headers: { 'Api-Key': API_KEY }
-        });
+        const res = await fetchWithProxy(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`);
         const data = await res.json();
 
         document.getElementById('deck-name').textContent = data.deck.name || 'Unknown Deck';
@@ -147,7 +166,7 @@
           div.className = 'card';
           const hasErrata = ERRATA[card.title];
           div.innerHTML = `
-            <img src="${card.image_url}" alt="${card.title}" loading="lazy">
+            <img src="${card.image_url}" alt="${card.title}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iODQiIHZpZXdCb3g9IjAgMCA2MCA4NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAiIGhlaWdodD0iODQiIGZpbGw9IiMyMjIiLz48dGV4dCB4PSIzMCIgeT0iNDIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIiBmaWxsPSIjOTk5IiBmb250LXNpemU9IjEyIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4='">
             <div>
               <div class="card-title">${card.title}</div>
               <div class="card-house">${card.house}</div>
@@ -167,7 +186,9 @@
         status.textContent = '';
       } catch (e) {
         document.getElementById('deck-name').textContent = 'Error';
-        document.getElementById('cards').innerHTML = '<p style="color:#f88">Deck not found. Try importing to DoK.</p>';
+        document.getElementById('cards').innerHTML = '<p class="error">Deck not found. Try importing to DoK.</p>';
+        status.textContent = `Error: ${e.message}`;
+        status.className = 'error';
       }
     }
 
@@ -189,15 +210,8 @@
       decksList.style.display = 'block';
     }
 
-    // Load your decks on startup
-    window.addEventListener('load', () => loadUserDecks());
-  </script>
-
-  <!-- PWA Service Worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
+    // Auto-load your decks on startup
+    window.addEventListener('load', () => setTimeout(loadUserDecks, 500));  // Slight delay for render
   </script>
 </body>
 </html>
