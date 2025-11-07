@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KeyForge Errata Scanner</title>
+  <title>KeyForge Errata Scanner [DEBUG]</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="https://www.keyforgemastervault.com/favicon.ico">
   <meta name="theme-color" content="#111111">
@@ -21,50 +21,71 @@
     .card-title { font-weight:600; font-size:1.1em; }
     .card-house { font-size:0.85em; color:#999; margin-top:2px; }
     .errata { color:var(--errata); font-weight:bold; font-size:0.9em; margin-top:4px; }
-    #status { text-align:center; color:#aaa; margin:10px 0; font-weight:600; }
+    #status { text-align:center; color:#0cf; margin:10px 0; font-weight:600; }
+    .debug { margin-top:20px; padding:12px; background:#222; border-radius:8px; font-family:monospace; font-size:0.85em; max-height:200px; overflow:auto; border:1px solid #444; }
+    .debug img { max-width:100%; margin-top:8px; border-radius:6px; }
     .tip { font-size:0.9em; color:#0cf; }
-    .debug { margin-top:20px; padding:10px; background:#222; border-radius:8px; font-family:monospace; font-size:0.8em; max-height:100px; overflow:auto; }
   </style>
 </head>
 <body>
   <h1>KeyForge Errata Scanner</h1>
-  <p>Point camera at the <strong>deck name</strong> (top of deck list card)</p>
-  <p class="tip">Hold steady • Fill the frame • Good light</p>
+  <p>Point at <strong>deck name</strong> (top of card)</p>
+  <p class="tip">Hold steady • Fill top of screen • Bright light</p>
   <div id="status">Tap to start</div>
   
   <div id="reader"></div>
   
   <button onclick="startScanner()">Start Scanner</button>
 
+  <!-- DEBUG PANEL -->
+  <div id="debug" class="debug">
+    <strong>OCR Debug Log</strong><br>
+    <span id="log"></span>
+    <div id="snapshot"></div>
+  </div>
+
   <div id="deck">
     <h2 id="deck-name">Loading...</h2>
     <div id="cards"></div>
   </div>
 
-  <!-- Optional: Debug OCR output -->
-  <div id="debug" class="debug hidden"></div>
-
   <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
+    const status = document.getElementById('status');
+    const log = document.getElementById('log');
+    const snapshot = document.getElementById('snapshot');
     const deckDiv = document.getElementById('deck');
     const deckName = document.getElementById('deck-name');
     const cardsDiv = document.getElementById('cards');
-    const status = document.getElementById('status');
-    const debug = document.getElementById('debug');
     let html5QrCode;
     let worker;
-    let lastText = '';
+    let lastOcrTime = 0;
 
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
 
-    const ERRATA = { /* ... same as before ... */ };
+    const ERRATA = {
+      "Arcenomometer": "Enhance two. Action: During your opponent’s next turn, each time they play a card, they lose 1 Aember.",
+      "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
+      // ... (keep your full list)
+    };
+
+    function logDebug(msg, imgData = null) {
+      const time = new Date().toLocaleTimeString();
+      log.innerHTML += `<br>[${time}] ${msg}`;
+      log.scrollTop = log.scrollHeight;
+      if (imgData) {
+        const img = document.createElement('img');
+        img.src = imgData;
+        snapshot.innerHTML = '';
+        snapshot.appendChild(img);
+      }
+    }
 
     async function startScanner() {
+      logDebug('Initializing Tesseract...');
       status.textContent = 'Initializing OCR...';
-      debug.classList.add('hidden');
-      debug.textContent = '';
 
       try {
         worker = await Tesseract.createWorker({
@@ -74,31 +95,30 @@
             }
           }
         });
-
         await worker.load();
         await worker.loadLanguage('eng');
         await worker.initialize('eng');
-
-        // OPTIMIZED: Better for small, stylized text
         await worker.setParameters({
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ,-',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ,-\'',
           preserve_interword_spaces: '1',
           tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
         });
 
+        logDebug('Tesseract ready');
+
         status.textContent = 'Opening camera...';
         html5QrCode = new Html5Qrcode("reader");
 
-        let frameCount = 0;
         html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 3 },  // Lower FPS = more stable OCR
+          { fps: 5 },
           async () => {
-            frameCount++;
-            if (frameCount % 10 !== 0) return; // Only OCR every ~3 seconds
+            const now = Date.now();
+            if (now - lastOcrTime < 2000) return; // OCR every 2 sec
+            lastOcrTime = now;
 
-            const video = readerDiv.querySelector('video');
-            if (!video) return;
+            const video = document.querySelector('#reader video');
+            if (!video || video.videoWidth === 0) return;
 
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
@@ -106,39 +126,45 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0);
 
-            // PREPROCESS: Crop to top 30%, grayscale, upscale
-            const cropHeight = canvas.height * 0.3;
-            const cropped = ctx.getImageData(0, 0, canvas.width, cropHeight);
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width * 2;
-            tempCanvas.height = cropHeight * 2;
-            const tctx = tempCanvas.getContext('2d');
-            tctx.imageSmoothingEnabled = false;
-            tctx.drawImage(canvas, 0, 0, canvas.width, cropHeight, 0, 0, tempCanvas.width, tempCanvas.height);
+            // Crop top 30%
+            const cropH = canvas.height * 0.3;
+            const cropped = ctx.getImageData(0, 0, canvas.width, cropH);
 
+            // Upscale 2x
+            const upscaled = document.createElement('canvas');
+            upscaled.width = canvas.width * 2;
+            upscaled.height = cropH * 2;
+            const uctx = upscaled.getContext('2d');
+            uctx.imageSmoothingEnabled = false;
+            uctx.drawImage(canvas, 0, 0, canvas.width, cropH, 0, 0, upscaled.width, upscaled.height);
+
+            const imgDataUrl = upscaled.toDataURL();
+
+            logDebug('Running OCR on cropped image...', imgDataUrl);
             status.textContent = 'Reading text...';
-            const result = await worker.recognize(tempCanvas);
-            const text = result.data.text.trim();
 
-            if (text && text.length > 5 && text !== lastText) {
-              lastText = text;
-              debug.textContent = `RAW: "${text}"`;
-              debug.classList.remove('hidden');
+            const result = await worker.recognize(upscaled);
+            const text = result.data.text;
 
-              const cleanName = cleanDeckName(text);
-              if (cleanName) {
-                stopScanner();
-                searchDeck(cleanName);
-              }
+            logDebug(`RAW OCR: "${text}"`);
+
+            const name = cleanDeckName(text);
+            if (name) {
+              logDebug(`CLEAN NAME: "${name}" → Searching DoK...`);
+              stopScanner();
+              searchDeck(name);
+            } else {
+              logDebug('No valid name found. Keep scanning...');
             }
           },
           () => {}
         ).then(() => {
-          status.textContent = 'Point at deck name • Hold steady';
+          status.textContent = 'Scanning... (OCR every 2 sec)';
           document.querySelector('button').style.display = 'none';
         });
       } catch (err) {
-        status.textContent = `Error: ${err.message}`;
+        logDebug(`ERROR: ${err.message}`);
+        status.textContent = 'OCR failed. Check console.';
       }
     }
 
@@ -146,26 +172,16 @@
       if (html5QrCode) html5QrCode.stop();
       if (worker) worker.terminate();
       document.querySelector('button').style.display = 'block';
-      status.textContent = 'Tap to scan again';
+      status.textContent = 'Stopped. Tap to restart.';
     }
 
     function cleanDeckName(text) {
-      // Extract first meaningful line
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
       if (!lines.length) return null;
-
       let name = lines[0];
-
-      // Remove common noise
-      name = name.replace(/KeyForge|Deck|Name|List|Archon|Æmber|Power|Tokens/gi, '');
-      name = name.replace(/[^\w ,'-]/g, ' ').trim();
-      name = name.replace(/\s+/g, ' ');
-
-      // Must have at least one comma or be long
-      if (name.includes(',') || name.length > 15) {
-        return name;
-      }
-      return null;
+      name = name.replace(/KeyForge|Deck|Name|Archon|Æmber/gi, '').trim();
+      name = name.replace(/[^\w ,'-]/g, ' ').replace(/\s+/g, ' ').trim();
+      return (name.includes(',') || name.length > 12) ? name : null;
     }
 
     async function searchDeck(name) {
@@ -179,79 +195,38 @@
         });
         const data = await res.json();
 
-        const exactMatch = data.decks?.find(d => 
-          d.name.toLowerCase() === name.toLowerCase()
-        );
-
-        if (exactMatch) {
-          loadDeckByUuid(exactMatch.id, exactMatch.name);
-        } else if (data.decks?.length > 0) {
-          // Fallback: show first result
+        const exact = data.decks?.find(d => d.name.toLowerCase() === name.toLowerCase());
+        if (exact) {
+          loadDeckByUuid(exact.id, exact.name);
+        } else if (data.decks?.length) {
           const first = data.decks[0];
-          deckName.textContent = `Found: "${first.name}" (tap to load)`;
-          cardsDiv.innerHTML = `<p style="text-align:center"><button onclick="loadDeckByUuid('${first.id}', '${first.name}')" style="background:#0c6;padding:10px 20px;border:none;border-radius:8px;color:white;">Load This Deck</button></p>`;
+          deckName.textContent = `Found: "${first.name}"`;
+          cardsDiv.innerHTML = `<p style="text-align:center"><button onclick="loadDeckByUuid('${first.id}', '${first.name}')" style="background:#0c6;padding:10px 20px;border:none;border-radius:8px;color:white;">Load This</button></p>`;
         } else {
-          throw new Error('No match');
+          throw new Error();
         }
-      } catch (e) {
-        deckName.textContent = 'Not Found';
-        cardsDiv.innerHTML = `
-          <p style="color:#f88;text-align:center">
-            No deck named "<strong>${name}</strong>" in DoK.<br><br>
-            <a href="https://decksofkeyforge.com/decks/import" target="_blank" style="color:#0cf">Import to DoK</a> then try again.
-          </p>
-        `;
+      } catch {
+        deckName.textContent = 'Not in DoK';
+        cardsDiv.innerHTML = `<p style="color:#f88;text-align:center">"<strong>${name}</strong>" not found.<br><a href="https://decksofkeyforge.com/decks/import" target="_blank" style="color:#0cf">Import to DoK</a></p>`;
       }
     }
 
-    window.loadDeckByUuid = async function(uuid, displayName) {
-      deckName.textContent = 'Loading deck...';
-      cardsDiv.innerHTML = '<p style="text-align:center;color:#aaa">Fetching cards...</p>';
-
-      try {
-        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
-          headers: { 'Api-Key': API_KEY }
-        });
-        const data = await res.json();
-
-        deckName.textContent = displayName || data.deck.name;
-        cardsDiv.innerHTML = '';
-
-        data._linked.cards.forEach(card => {
-          const div = document.createElement('div');
-          div.className = 'card';
-          const hasErrata = ERRATA[card.title];
-          div.innerHTML = `
-            <img src="${card.image_url}" alt="${card.title}" loading="lazy">
-            <div>
-              <div class="card-title">${card.title}</div>
-              <div class="card-house">${card.house}</div>
-              ${hasErrata ? '<div class="errata">ERRATA → Tap to view</div>' : ''}
-            </div>
-          `;
-          if (hasErrata) {
-            div.style.cursor = 'pointer';
-            div.onclick = () => showErrata(card.title);
-          }
-          cardsDiv.appendChild(div);
-        });
-      } catch (e) {
-        cardsDiv.innerHTML = '<p style="color:#f88">Failed to load deck.</p>';
-      }
+    window.loadDeckByUuid = async function(uuid, name) {
+      // ... same as before (render deck)
+      deckName.textContent = 'Loading cards...';
+      const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, { headers: { 'Api-Key': API_KEY } });
+      const data = await res.json();
+      deckName.textContent = name;
+      cardsDiv.innerHTML = '';
+      data._linked.cards.forEach(card => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        const hasErrata = ERRATA[card.title];
+        div.innerHTML = `<img src="${card.image_url}" loading="lazy"><div><div class="card-title">${card.title}</div><div class="card-house">${card.house}</div>${hasErrata ? '<div class="errata">ERRATA → Tap</div>' : ''}</div>`;
+        if (hasErrata) div.onclick = () => alert(`${card.title}\n\n${ERRATA[card.title]}`);
+        cardsDiv.appendChild(div);
+      });
     };
-
-    function showErrata(title) {
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999;';
-      modal.innerHTML = `
-        <div style="background:#300;padding:20px;border-radius:8px;max-width:500px;color:#eee;">
-          <h3 style="margin-top:0;">${title} (Errata)</h3>
-          <p>${ERRATA[title]}</p>
-          <button onclick="this.closest('div').remove()" style="margin-top:16px;padding:10px 20px;background:#c00;color:white;border:none;border-radius:8px;">Close</button>
-        </div>
-      `;
-      document.body.appendChild(modal);
-    }
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
