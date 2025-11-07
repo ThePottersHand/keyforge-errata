@@ -28,11 +28,12 @@
     .notfound { color:#f88; text-align:center; }
     .import { color:#0cf; }
     #suggestions { max-height:200px; overflow:auto; }
+    .error { color:#f88; font-size:0.9em; text-align:center; }
   </style>
 </head>
 <body>
   <h1>KeyForge Errata Scanner</h1>
-  <p>Type your deck name (searches as you type)</p>
+  <p>Type your deck name (searches after 4+ chars)</p>
   
   <input type="text" id="deckInput" placeholder="e.g. Grouseribius, the Bucolic Labs Zoomaster" autofocus>
   <button onclick="searchDeck()">Search Deck</button>
@@ -75,29 +76,25 @@
       "Magda the Rat": "Elusive. Play: Steal 2 Aember. If Magda the Rat leaves play, your opponent steals 2 Aember.",
       "Missile Officer Myers": "Deploy. Play/Reap: Resolve the play effect of a neighboring creature as if you had just played it. Scrap: You may play 1 card that is not of the active house during your turn.",
       "Offering to Kiligog": "Omni: Destroy a friendly creature. If you do, choose a creature in your discard pile. Place it facedown under Offering to Kiligog. Omni: Make each card under Offering to Kiligog a token creature as if the card was on top of your deck.",
-      "Pain Reaction": "Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature’s neighbors after it leaves play.",
-      "Ragatha": "Treachery. After an enemy creature reaps, deal 3 damage to each of Ragatha’s neighbors.",
-      "Sample 42-C": "Action: Move 1 Aember from your opponent’s pool to Sample 42-C. If there are 4 Aember or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your Aember (rounding down).",
-      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner’s hand instead.",
+      "Pain Reaction": "Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature's neighbors after it leaves play.",
+      "Ragatha": "Treachery. After an enemy creature reaps, deal 3 damage to each of Ragatha's neighbors.",
+      "Sample 42-C": "Action: Move 1 Aember from your opponent's pool to Sample 42-C. If there are 4 Aember or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your Aember (rounding down).",
+      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner's hand instead.",
       "Shrink-ray Technician": "After Reap: Choose an enemy creature. It gets -2 power until the end of the turn. Scrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
       "Space Invaders": "Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
       "Tendrils of Pain": "Play: Deal 1 damage to each creature. Deal 4 damage to each creature instead if your opponent forged a key on their previous turn.",
-      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner's hand instead.",
       "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
     };
 
-    // Auto-search on typing (debounced)
+    // Auto-search on typing (debounced, min 4 chars)
     let searchTimeout;
     input.addEventListener('input', () => {
       clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        const name = input.value.trim();
-        if (name.length > 3) {
-          showSuggestions(name);
-        } else {
-          suggestionsDiv.innerHTML = '';
-        }
-      }, 500);
+      const query = input.value.trim();
+      suggestionsDiv.innerHTML = '';
+      if (query.length < 4) return;
+      searchTimeout = setTimeout(() => showSuggestions(query), 500);
     });
 
     // Enter key searches
@@ -110,6 +107,7 @@
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(query)}`, {
           headers: { 'Api-Key': API_KEY }
         });
+        if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
         const data = await res.json();
 
         suggestionsDiv.innerHTML = '';
@@ -121,15 +119,20 @@
             btn.onclick = () => loadDeck(deck.id, deck.name);
             suggestionsDiv.appendChild(btn);
           });
+        } else {
+          suggestionsDiv.innerHTML = '<p style="color:#aaa;text-align:center;">No suggestions</p>';
         }
       } catch (e) {
-        suggestionsDiv.innerHTML = '<p style="color:#f88;text-align:center;">Search error</p>';
+        suggestionsDiv.innerHTML = `<p class="error">Search failed: ${e.message}</p>`;
       }
     }
 
     async function searchDeck() {
       const name = input.value.trim();
-      if (!name) return;
+      if (name.length < 4) {
+        alert('Enter at least 4 characters');
+        return;
+      }
 
       deckDiv.style.display = 'block';
       deckName.textContent = `Searching: "${name}"`;
@@ -140,14 +143,17 @@
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(name)}`, {
           headers: { 'Api-Key': API_KEY }
         });
+        if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
         const data = await res.json();
 
-        const normalizedQuery = name.toLowerCase().trim();
-        const exact = data.decks?.find(d => d.name.toLowerCase().trim() === normalizedQuery);
+        const normalizedQuery = name.toLowerCase().replace(/[^\w\s,]/g, '').trim();  // Fuzzy: remove punctuation
+        const exact = data.decks?.find(d => 
+          d.name.toLowerCase().replace(/[^\w\s,]/g, '').trim() === normalizedQuery
+        );
         if (exact) {
           loadDeck(exact.id, exact.name);
         } else if (data.decks?.length > 0) {
-          deckName.innerHTML = `No exact match. Top results:`;
+          deckName.innerHTML = `No exact match for "${name}". Top results:`;
           cardsDiv.innerHTML = '';
           data.decks.slice(0, 10).forEach(deck => {
             const div = document.createElement('div');
@@ -156,14 +162,14 @@
             cardsDiv.appendChild(div);
           });
         } else {
-          throw new Error();
+          throw new Error('No results');
         }
       } catch (e) {
-        deckName.textContent = 'Not Found';
+        deckName.textContent = 'Search Failed';
         cardsDiv.innerHTML = `
           <p class="notfound">
-            "<strong>${name}</strong>" not in DoK.<br><br>
-            <a href="https://decksofkeyforge.com/decks/import" target="_blank" class="import">Import to DoK</a> then search again.
+            Error: ${e.message}<br><br>
+            Try a longer query or <a href="https://decksofkeyforge.com/decks/import" target="_blank" class="import">import to DoK</a>.
           </p>
         `;
       }
@@ -178,6 +184,7 @@
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
           headers: { 'Api-Key': API_KEY }
         });
+        if (!res.ok) throw new Error(`Load failed: ${res.status}`);
         const data = await res.json();
 
         deckName.textContent = displayName;
@@ -213,7 +220,7 @@
           cardsDiv.appendChild(div);
         });
       } catch (e) {
-        cardsDiv.innerHTML = '<p class="notfound">Failed to load deck.</p>';
+        cardsDiv.innerHTML = `<p class="notfound">Load error: ${e.message}</p>`;
       }
     };
 
