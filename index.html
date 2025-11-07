@@ -24,13 +24,15 @@
     .errata-text { background:#300; padding:12px; border-radius:8px; margin:12px 0; font-size:0.95em; line-height:1.5; }
     .hidden { display:none; }
     .loading { text-align:center; color:#aaa; }
+    #status { text-align:center; color:#aaa; margin:10px 0; }
   </style>
 </head>
 <body>
   <h1>KeyForge Errata Scanner</h1>
   <p>Point your camera at any deck QR code</p>
+  <div id="status"></div>
   
-  <video id="scanner" class="hidden"></video>
+  <video id="scanner" class="hidden" playsinline></video>
   <button onclick="startScanner()">Start Scanner</button>
 
   <div id="deck">
@@ -38,15 +40,16 @@
     <div id="cards"></div>
   </div>
 
-  <!-- QR Scanner -->
-  <script src="https://unpkg.com/@zxing/library@0.19.1/dist/index.min.js"></script>
+  <!-- html5-qrcode Library (Reliable, Modern) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
     const video = document.getElementById('scanner');
     const deckDiv = document.getElementById('deck');
     const deckName = document.getElementById('deck-name');
     const cardsDiv = document.getElementById('cards');
-    let codeReader;
+    const status = document.getElementById('status');
+    let html5QrCode;
 
     // === YOUR DOK API KEY ===
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
@@ -87,23 +90,38 @@
     };
 
     function startScanner() {
-      codeReader = new ZXing.BrowserMultiFormatReader();
-      codeReader.decodeFromVideoDevice(null, 'scanner', async (result) => {
-        if (result) {
-          const uuid = extractUuid(result.getText());
+      status.textContent = 'Requesting camera access...';
+      html5QrCode = new Html5Qrcode('scanner');
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      
+      html5QrCode.start(
+        { facingMode: 'environment' },  // Back camera
+        config,
+        (decodedText) => {
+          const uuid = extractUuid(decodedText);
           if (uuid) {
             stopScanner();
             loadDeck(uuid);
           }
+        },
+        (error) => {
+          // Optional: Log non-fatal errors
+          console.log('Scan error:', error);
         }
+      ).then(() => {
+        video.classList.remove('hidden');
+        document.querySelector('button').classList.add('hidden');
+        status.textContent = 'Scanning... (Point at QR)';
+      }).catch((err) => {
+        status.textContent = `Error: ${err}. Check permissions/console.`;
+        console.error('Scanner start failed:', err);
       });
-      video.classList.remove('hidden');
-      document.querySelector('button').classList.add('hidden');
     }
 
     function stopScanner() {
-      if (codeReader) codeReader.reset();
+      if (html5QrCode) html5QrCode.stop().then(() => { html5QrCode.clear(); });
       video.classList.add('hidden');
+      status.textContent = '';
     }
 
     function extractUuid(text) {
@@ -122,9 +140,10 @@
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
           headers: { 'Api-Key': API_KEY }
         });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        if (!data.deck?._links) throw new Error("Not found");
+        if (!data.deck?._links) throw new Error("Deck not found");
 
         deckName.textContent = data.deck.name || 'Unknown Deck';
         cardsDiv.innerHTML = '';
@@ -145,19 +164,12 @@
             div.style.cursor = 'pointer';
             div.onclick = () => {
               const modal = document.createElement('div');
-              modal.style.position = 'fixed';
-              modal.style.inset = '0';
-              modal.style.background = 'rgba(0,0,0,0.9)';
-              modal.style.display = 'flex';
-              modal.style.alignItems = 'center';
-              modal.style.justifyContent = 'center';
-              modal.style.padding = '20px';
-              modal.style.zIndex = '9999';
+              modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999;';
               modal.innerHTML = `
                 <div class="errata-text" style="max-width:500px;">
                   <h3 style="margin-top:0;">${card.title} (Errata)</h3>
                   <p>${ERRATA[card.title].replace(/⚡/g, 'Aember').replace(//g, 'Damage')}</p>
-                  <button onclick="this.closest('div').remove()" style="margin-top:16px; padding:10px 20px; background:#c00; color:white; border:none; border-radius:8px;">Close</button>
+                  <button onclick="this.closest('div').remove()" style="margin-top:16px;padding:10px 20px;background:#c00;color:white;border:none;border-radius:8px;">Close</button>
                 </div>
               `;
               document.body.appendChild(modal);
@@ -180,6 +192,7 @@
             3. Try scanning again!
           </p>
         `;
+        console.error('Load error:', e);
       }
     }
 
@@ -187,21 +200,26 @@
     window.addEventListener('load', () => {
       const cached = localStorage.getItem('lastDeck');
       if (cached) {
-        const { uuid, data } = JSON.parse(cached);
-        if (Date.now() - data.time < 24*60*60*1000) {
-          // Load from cache
-          deckDiv.style.display = 'block';
-          deckName.textContent = data.deck.name;
-          // ... render cards (omitted for brevity)
-        }
+        try {
+          const { uuid, data, time } = JSON.parse(cached);
+          if (Date.now() - time < 24*60*60*1000) {
+            deckDiv.style.display = 'block';
+            deckName.textContent = data.deck.name;
+            // Render cached cards (simplified)
+            cardsDiv.innerHTML = '<p>Cached deck loaded. Rescan for updates.</p>';
+          }
+        } catch {}
       }
     });
+
+    // Clean up on unload
+    window.addEventListener('beforeunload', stopScanner);
   </script>
 
   <!-- PWA Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
+      navigator.serviceWorker.register('sw.js').catch(console.error);
     }
   </script>
 </body>
