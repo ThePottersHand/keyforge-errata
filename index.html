@@ -16,6 +16,8 @@
     input { width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px; border:2px solid #444; border-radius:12px; background:#222; color:var(--txt); text-align:center; }
     input:focus { outline:none; border-color:var(--acc); }
     button { width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px; background:var(--acc); color:white; border:none; border-radius:12px; font-weight:600; }
+    .suggestion { display:block; width:100%; max-width:500px; margin:8px auto; padding:12px; background:#333; border:none; border-radius:8px; color:var(--txt); cursor:pointer; text-align:left; }
+    .suggestion:hover { background:#444; }
     #deck { margin-top:24px; display:none; }
     .card { display:flex; align-items:center; padding:12px; border-bottom:1px solid #333; border-radius:8px; margin-bottom:8px; background:#1a1a1a; }
     .card img { width:60px; height:84px; margin-right:14px; border-radius:6px; object-fit:cover; }
@@ -25,14 +27,17 @@
     .loading { text-align:center; color:#aaa; }
     .notfound { color:#f88; text-align:center; }
     .import { color:#0cf; }
+    #suggestions { max-height:200px; overflow:auto; }
   </style>
 </head>
 <body>
   <h1>KeyForge Errata Scanner</h1>
-  <p>Type your deck name below</p>
+  <p>Type your deck name (searches as you type)</p>
   
-  <input type="text" id="deckInput" placeholder="e.g. The Potter's Hand, Shadow of the Crucible" autofocus>
+  <input type="text" id="deckInput" placeholder="e.g. Grouseribius, the Bucolic Labs Zoomaster" autofocus>
   <button onclick="searchDeck()">Search Deck</button>
+
+  <div id="suggestions"></div>
 
   <div id="deck">
     <h2 id="deck-name" class="loading">Searching...</h2>
@@ -42,6 +47,7 @@
   <script>
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
     const input = document.getElementById('deckInput');
+    const suggestionsDiv = document.getElementById('suggestions');
     const deckDiv = document.getElementById('deck');
     const deckName = document.getElementById('deck-name');
     const cardsDiv = document.getElementById('cards');
@@ -80,10 +86,46 @@
       "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
     };
 
-    // Enter key also searches
+    // Auto-search on typing (debounced)
+    let searchTimeout;
+    input.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const name = input.value.trim();
+        if (name.length > 3) {
+          showSuggestions(name);
+        } else {
+          suggestionsDiv.innerHTML = '';
+        }
+      }, 500);
+    });
+
+    // Enter key searches
     input.addEventListener('keypress', e => {
       if (e.key === 'Enter') searchDeck();
     });
+
+    async function showSuggestions(query) {
+      try {
+        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(query)}`, {
+          headers: { 'Api-Key': API_KEY }
+        });
+        const data = await res.json();
+
+        suggestionsDiv.innerHTML = '';
+        if (data.decks && data.decks.length > 0) {
+          data.decks.slice(0, 5).forEach(deck => {
+            const btn = document.createElement('button');
+            btn.className = 'suggestion';
+            btn.innerHTML = `"${deck.name}" <small style="color:#aaa;">(${deck.expansion?.name || 'Unknown'})</small>`;
+            btn.onclick = () => loadDeck(deck.id, deck.name);
+            suggestionsDiv.appendChild(btn);
+          });
+        }
+      } catch (e) {
+        suggestionsDiv.innerHTML = '<p style="color:#f88;text-align:center;">Search error</p>';
+      }
+    }
 
     async function searchDeck() {
       const name = input.value.trim();
@@ -92,6 +134,7 @@
       deckDiv.style.display = 'block';
       deckName.textContent = `Searching: "${name}"`;
       cardsDiv.innerHTML = '<p class="loading">Querying DoK...</p>';
+      suggestionsDiv.innerHTML = '';
 
       try {
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(name)}`, {
@@ -99,13 +142,19 @@
         });
         const data = await res.json();
 
-        const exact = data.decks?.find(d => d.name.toLowerCase() === name.toLowerCase());
+        const normalizedQuery = name.toLowerCase().trim();
+        const exact = data.decks?.find(d => d.name.toLowerCase().trim() === normalizedQuery);
         if (exact) {
           loadDeck(exact.id, exact.name);
         } else if (data.decks?.length > 0) {
-          const first = data.decks[0];
-          deckName.innerHTML = `Found: <strong>"${first.name}"</strong><br><button onclick="loadDeck('${first.id}', '${first.name}')" style="margin-top:8px;padding:8px 16px;background:#0c6;border:none;border-radius:8px;color:white;font-size:0.9em;">Load This Deck</button>`;
+          deckName.innerHTML = `No exact match. Top results:`;
           cardsDiv.innerHTML = '';
+          data.decks.slice(0, 10).forEach(deck => {
+            const div = document.createElement('div');
+            div.className = 'suggestion';
+            div.innerHTML = `<strong>"${deck.name}"</strong> <small style="color:#aaa;">(${deck.expansion?.name || 'Unknown'})</small><br><button onclick="loadDeck('${deck.id}', '${deck.name}')" style="margin-top:4px;padding:6px 12px;background:#0c6;border:none;border-radius:6px;color:white;font-size:0.8em;">Load This Deck</button>`;
+            cardsDiv.appendChild(div);
+          });
         } else {
           throw new Error();
         }
@@ -123,6 +172,7 @@
     window.loadDeck = async function(uuid, displayName) {
       deckName.textContent = 'Loading cards...';
       cardsDiv.innerHTML = '<p class="loading">Fetching from DoK...</p>';
+      suggestionsDiv.innerHTML = '';
 
       try {
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
