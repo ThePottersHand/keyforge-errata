@@ -42,6 +42,7 @@
     <div id="cards"></div>
   </div>
 
+  <!-- Updated to latest v2.3.8 -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
@@ -95,37 +96,79 @@
       console.log('[KF Scanner]', msg);
     }
 
-    function startScanner() {
-      status.textContent = 'Starting camera...';
-      log('Camera requested');
+    async function startScanner() {
+      status.textContent = 'Detecting cameras...';
+      log('Detecting cameras...');
       
       html5QrCode = new Html5Qrcode("reader");
       
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          log(`QR detected: ${decodedText}`);
-          reader.classList.add('scanning');
-          
-          const uuid = extractUuid(decodedText);
-          if (uuid) {
-            log(`UUID found: ${uuid}`);
-            stopScanner();
-            loadDeck(uuid);
-          } else {
-            log(`No UUID in: ${decodedText}`);
+      try {
+        // Step 1: Get cameras (fixes hang on mobile)
+        const cameras = await Html5Qrcode.getCameras();
+        log(`Found ${cameras.length} cameras`);
+        
+        if (cameras.length === 0) {
+          throw new Error('No cameras found');
+        }
+        
+        // Pick back camera (environment)
+        const backCam = cameras.find(cam => cam.facingMode === 'environment') || cameras[0];
+        const camId = backCam.id;
+        log(`Using camera: ${backCam.label || camId}`);
+        
+        // Step 2: Start with QR-only config
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],  // QR only, faster
+          aspectRatio: 1.0,
+          rememberLastUsedCamera: true
+        };
+        
+        await html5QrCode.start(camId, config,
+          (decodedText) => {
+            log(`QR detected: ${decodedText}`);
+            reader.classList.add('scanning');
+            
+            const uuid = extractUuid(decodedText);
+            if (uuid) {
+              log(`UUID found: ${uuid}`);
+              stopScanner();
+              loadDeck(uuid);
+            } else {
+              log(`No UUID in: ${decodedText}`);
+            }
+          },
+          (error) => {
+            // Ignore non-fatal scan errors (e.g., no QR in frame)
+            if (error !== 'No MultiFormat Readers were able to detect the code.') {
+              console.warn('Scan error:', error);
+            }
           }
-        },
-        () => {}
-      ).then(() => {
+        );
+        
         status.textContent = 'Scanning...';
         reader.classList.add('scanning');
         document.querySelector('button').style.display = 'none';
-      }).catch(err => {
-        status.textContent = 'Camera failed';
-        log(`Error: ${err}`);
-      });
+        log('Scanner started successfully');
+        
+      } catch (err) {
+        status.textContent = 'Start failed';
+        log(`Error: ${err.message}`);
+        // Fallback: Try without explicit cam
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 5, qrbox: { width: 250, height: 250 }, formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] },
+          (decodedText) => { /* same as above */ },
+          (error) => { /* same */ }
+        ).then(() => {
+          status.textContent = 'Scanning (fallback)...';
+          log('Fallback start OK');
+        }).catch(fallbackErr => {
+          log(`Fallback failed: ${fallbackErr.message}`);
+          status.textContent = 'Camera error - check permissions';
+        });
+      }
     }
 
     function stopScanner() {
@@ -133,19 +176,19 @@
         html5QrCode.stop().then(() => {
           html5QrCode.clear();
           reader.classList.remove('scanning');
-        });
+          log('Scanner stopped');
+        }).catch(err => log(`Stop error: ${err}`));
       }
       document.querySelector('button').style.display = 'block';
       status.textContent = 'Tap to scan again';
     }
 
-    // FIXED: Handles ALL KeyForge QR formats
     function extractUuid(text) {
-      // 1. Raw UUID: a1b2c3d4-e5f6-...
+      // Raw UUID
       const raw = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
       if (raw) return raw[0];
 
-      // 2. Full URL: https://.../deck-details/UUID
+      // Full URL
       try {
         const url = new URL(text.trim());
         const path = url.pathname;
@@ -153,7 +196,7 @@
         if (match) return match[1];
       } catch {}
 
-      // 3. Legacy keyforgegame.com
+      // Legacy
       const legacy = text.match(/keyforgegame\.com.*([a-f0-9-]{36})/i);
       if (legacy) return legacy[1];
 
