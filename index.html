@@ -55,7 +55,39 @@
 
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
 
-    const ERRATA = { /* ... same as before ... */ };
+    const ERRATA = {
+      "Arcenomometer": "Enhance two. Action: During your opponent’s next turn, each time they play a card, they lose 1 Aember.",
+      "Auto-Legionary": "Action: Put Auto-Legionary on a flank of your battleline. While in the battleline, it is considered a creature with 5 power and may be used as if it belonged to the active house.",
+      "Bait and Switch": "Play: If your opponent has more Aember than you, steal 1 Aember. Repeat the preceding effect if your opponent still has more Aember than you.",
+      "Biomatrix Backup": "This creature gains, 'Destroyed: Put this creature into its owner’s archives.'",
+      "Cauldron": "Omni: Put the top card of your deck faceup under Cauldron. If there are 3 or more cards under Cauldron, play them one at a time as if they were in your hand.",
+      "Collector Worm": "After Fight: Put the creature Collector Worm fights into your archives. (Both creatures must survive the fight.) If that creature leaves your archives, put it in its owner’s hand instead.",
+      "Corner the Market": "Play: During your opponent’s next turn, they cannot play cards, and each time they discard a card from their hand, they may archive that card from their discard pile.",
+      "Curse of Forgetfulness (Anomaly)": "Treachery. (This card enters play under your opponent's control.) At the end of your turn, purge the top card in your discard pile.",
+      "Custom Virus": "Omni: Destroy Custom Virus. You may purge a creature from your hand. If you do, destroy each creature that shares a trait with the purged creature.",
+      "Drummernaut": "Play/Fight/Reap: Return another friendly Giant creature to your hand.",
+      "Duskwitch": "Omega. Elusive. Your creatures enter play ready.",
+      "Ecto-Charge": "Play: Forge a key at +20 Aember current cost, reduced by 1 Aember for each card in your discard pile (to a minimum of 6). If you do, purge Ecto-Charge.",
+      "Experimental Therapy": "This creature may be used as if it belonged to the active house. Play: Stun and exhaust this creature.",
+      "Glimmerspore": "Play: Put an artifact from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+      "Incubation Chamber": "Omni: You may reveal a Mars creature from your hand. If you do, archive it.",
+      "Into the Warp": "Play: Each player discards the top card of their deck. Destroy each creature that shares a house with at least one of the discarded cards.",
+      "Keyforgery": "When your opponent would forge a key on their turn, that player names a house. Reveal a random card from your hand. If that card is not of the named house, destroy Keyforgery and they do not forge that key (no Aember is spent).",
+      "Library Access": "Play: For the remainder of the turn, each time you play another card, draw a card. Purge Library Access.",
+      "Life for a Life": "Play: Destroy a friendly creature. If you do, deal 6 damage to a creature.",
+      "Magda the Rat": "Elusive. Play: Steal 2 Aember. If Magda the Rat leaves play, your opponent steals 2 Aember.",
+      "Missile Officer Myers": "Deploy. Play/Reap: Resolve the play effect of a neighboring creature as if you had just played it. Scrap: You may play 1 card that is not of the active house during your turn.",
+      "Offering to Kiligog": "Omni: Destroy a friendly creature. If you do, choose a creature in your discard pile. Place it facedown under Offering to Kiligog. Omni: Make each card under Offering to Kiligog a token creature as if the card was on top of your deck.",
+      "Pain Reaction": "Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature’s neighbors after it leaves play.",
+      "Ragatha": "Treachery. After an enemy creature reaps, deal 3 damage to each of Ragatha’s neighbors.",
+      "Sample 42-C": "Action: Move 1 Aember from your opponent’s pool to Sample 42-C. If there are 4 Aember or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your Aember (rounding down).",
+      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner’s hand instead.",
+      "Shrink-ray Technician": "After Reap: Choose an enemy creature. It gets -2 power until the end of the turn. Scrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
+      "Space Invaders": "Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
+      "Tendrils of Pain": "Play: Deal 1 damage to each creature. Deal 4 damage to each creature instead if your opponent forged a key on their previous turn.",
+      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+      "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
+    };
 
     function log(msg) {
       debug.style.display = 'block';
@@ -107,18 +139,23 @@
       status.textContent = 'Tap to scan again';
     }
 
+    // FIXED: Handles ALL KeyForge QR formats
     function extractUuid(text) {
-      // Match ANY 36-char UUID in the string
-      const match = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-      if (match) return match[0];
+      // 1. Raw UUID: a1b2c3d4-e5f6-...
+      const raw = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
+      if (raw) return raw[0];
 
-      // Fallback: try to get last part of URL
+      // 2. Full URL: https://.../deck-details/UUID
       try {
-        const url = new URL(text);
-        const parts = url.pathname.split('/');
-        const last = parts[parts.length - 1];
-        if (last.length === 36 && last.includes('-')) return last;
+        const url = new URL(text.trim());
+        const path = url.pathname;
+        const match = path.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+        if (match) return match[1];
       } catch {}
+
+      // 3. Legacy keyforgegame.com
+      const legacy = text.match(/keyforgegame\.com.*([a-f0-9-]{36})/i);
+      if (legacy) return legacy[1];
 
       return null;
     }
@@ -160,8 +197,8 @@
         });
 
       } catch (e) {
-        deckName.textContent = 'Not in DoK';
-        cardsDiv.innerHTML = '<p style="color:#f88;text-align:center">Open in Master Vault → Share → "Open in DoK"</p>';
+        deckName.textContent = 'Error';
+        cardsDiv.innerHTML = '<p style="color:#f88;text-align:center">Failed to load. Check internet or try again.</p>';
         log(`Load failed: ${e.message}`);
       }
     }
