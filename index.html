@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KeyForge Errata Scanner</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="https://www.keyforgemastervault.com/favicon.ico">
+  <meta name="theme-color" content="#111111">
+  <style>
+    :root { --bg: #111; --text: #eee; --accent: #0066cc; --errata: #ff4444; }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:16px; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; }
+    h1 { text-align:center; margin:0 0 8px; font-size:1.8em; }
+    p { text-align:center; margin:8px 0 16px; color:#aaa; }
+    #scanner { width:100%; max-width:500px; margin:0 auto; display:block; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+    button { width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px; background:var(--accent); color:white; border:none; border-radius:12px; font-weight:600; }
+    #deck { margin-top:24px; display:none; }
+    .card { display:flex; align-items:center; padding:12px; border-bottom:1px solid #333; border-radius:8px; margin-bottom:8px; background:#1a1a1a; }
+    .card img { width:60px; height:84px; margin-right:14px; border-radius:6px; object-fit:cover; }
+    .card-title { font-weight:600; font-size:1.1em; }
+    .card-house { font-size:0.85em; color:#999; margin-top:2px; }
+    .errata { color:var(--errata); font-weight:bold; font-size:0.9em; margin-top:4px; }
+    .errata-text { background:#300; padding:12px; border-radius:8px; margin:12px 0; font-size:0.95em; line-height:1.5; }
+    .hidden { display:none; }
+    .loading { text-align:center; color:#aaa; }
+  </style>
+</head>
+<body>
+  <h1>KeyForge Errata Scanner</h1>
+  <p>Point your camera at any deck QR code</p>
+  
+  <video id="scanner" class="hidden"></video>
+  <button onclick="startScanner()">Start Scanner</button>
+
+  <div id="deck">
+    <h2 id="deck-name" class="loading">Loading deck...</h2>
+    <div id="cards"></div>
+  </div>
+
+  <!-- QR Scanner -->
+  <script src="https://unpkg.com/@zxing/library@0.19.1/dist/index.min.js"></script>
+
+  <script>
+    const video = document.getElementById('scanner');
+    const deckDiv = document.getElementById('deck');
+    const deckName = document.getElementById('deck-name');
+    const cardsDiv = document.getElementById('cards');
+    let codeReader;
+
+    // === YOUR DOK API KEY ===
+    const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
+
+    // === ERRATA DATABASE ===
+    const ERRATA = {
+      "Arcenomometer": "Enhance ⚙️⚙️. Action: During your opponent’s next turn, each time they play a card, they lose 1⚡.",
+      "Auto-Legionary": "Action: Put Auto-Legionary on a flank of your battleline. While in the battleline, it is considered a creature with 5 power and may be used as if it belonged to the active house.",
+      "Bait and Switch": "Play: If your opponent has more ⚡ than you, steal 1⚡. Repeat the preceding effect if your opponent still has more ⚡ than you.",
+      "Biomatrix Backup": "This creature gains, ”Destroyed: Put this creature into its owner’s archives.”",
+      "Cauldron": "Omni: Put the top card of your deck faceup under Cauldron. If there are 3 or more cards under Cauldron, play them one at a time as if they were in your hand.",
+      "Collector Worm": "After Fight: Put the creature Collector Worm fights into your archives. (Both creatures must survive the fight.) If that creature leaves your archives, put it in its owner’s hand instead.",
+      "Corner the Market": "Play: During your opponent’s next turn, they cannot play cards, and each time they discard a card from their hand, they may archive that card from their discard pile.",
+      "Curse of Forgetfulness (Anomaly)": "Treachery. (This card enters play under your opponent's control.) At the end of your turn, purge the top card in your discard pile.",
+      "Custom Virus": "Omni: Destroy Custom Virus. You may purge a creature from your hand. If you do, destroy each creature that shares a trait with the purged creature.",
+      "Drummernaut": "Play/Fight/Reap: Return another friendly Giant creature to your hand.",
+      "Duskwitch": "Omega. Elusive. Your creatures enter play ready.",
+      "Ecto-Charge": "Play: Forge a key at +20⚡ current cost, reduced by 1⚡ for each card in your discard pile (to a minimum of 6). If you do, purge Ecto-Charge.",
+      "Experimental Therapy": "This creature may be used as if it belonged to the active house. Play: Stun and exhaust this creature.",
+      "Glimmerspore": "Play: Put an artifact from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+      "Incubation Chamber": "Omni: You may reveal a Mars creature from your hand. If you do, archive it.",
+      "Into the Warp": "Play: Each player discards the top card of their deck. Destroy each creature that shares a house with at least one of the discarded cards.",
+      "Keyforgery": "When your opponent would forge a key on their turn, that player names a house. Reveal a random card from your hand. If that card is not of the named house, destroy Keyforgery and they do not forge that key (no ⚡ is spent).",
+      "Library Access": "Play: For the remainder of the turn, each time you play another card, draw a card. Purge Library Access.",
+      "Life for a Life": "Play: Destroy a friendly creature. If you do, deal 6 to a creature.",
+      "Magda the Rat": "Elusive. Play: Steal 2⚡. If Magda the Rat leaves play, your opponent steals 2⚡.",
+      "Missile Officer Myers": "Deploy. Play/Reap: Resolve the play effect of a neighboring creature as if you had just played it. Scrap: You may play 1 card that is not of the active house during your turn.",
+      "Offering to Kiligog": "Omni: Destroy a friendly creature. If you do, choose a creature in your discard pile. Place it facedown under Offering to Kiligog. Omni: Make each card under Offering to Kiligog a token creature as if the card was on top of your deck.",
+      "Pain Reaction": "Play: Deal 2 to an enemy creature. If this damage destroys that creature, deal 2 to each of that creature’s neighbors after it leaves play.",
+      "Ragatha": "Treachery. After an enemy creature reaps, deal 3 to each of Ragatha’s neighbors.",
+      "Sample 42-C": "Action: Move 1⚡ from your opponent’s pool to Sample 42-C. If there are 4⚡ or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your ⚡ (rounding down).",
+      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner’s hand instead.",
+      "Shrink-ray Technician": "After Reap: Choose an enemy creature. It gets -2 power until the end of the turn. Scrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
+      "Space Invaders": "Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
+      "Tendrils of Pain": "Play: Deal 1 to each creature. Deal 4 to each creature instead if your opponent forged a key on their previous turn.",
+      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+      "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature.",
+    };
+
+    function startScanner() {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      codeReader.decodeFromVideoDevice(null, 'scanner', async (result) => {
+        if (result) {
+          const uuid = extractUuid(result.getText());
+          if (uuid) {
+            stopScanner();
+            loadDeck(uuid);
+          }
+        }
+      });
+      video.classList.remove('hidden');
+      document.querySelector('button').classList.add('hidden');
+    }
+
+    function stopScanner() {
+      if (codeReader) codeReader.reset();
+      video.classList.add('hidden');
+    }
+
+    function extractUuid(text) {
+      const urlMatch = text.match(/deck-details[\/.]([a-f0-9-]{36})/i);
+      if (urlMatch) return urlMatch[1];
+      const uuidMatch = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
+      return uuidMatch ? uuidMatch[0] : null;
+    }
+
+    async function loadDeck(uuid) {
+      deckDiv.style.display = 'block';
+      deckName.textContent = 'Loading...';
+      cardsDiv.innerHTML = '<p class="loading">Fetching from Decks of KeyForge...</p>';
+
+      try {
+        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
+          headers: { 'Api-Key': API_KEY }
+        });
+        const data = await res.json();
+
+        if (!data.deck?._links) throw new Error("Not found");
+
+        deckName.textContent = data.deck.name || 'Unknown Deck';
+        cardsDiv.innerHTML = '';
+
+        data._linked.cards.forEach(card => {
+          const div = document.createElement('div');
+          div.className = 'card';
+          const hasErrata = ERRATA[card.title];
+          div.innerHTML = `
+            <img src="${card.image_url}" alt="${card.title}" loading="lazy">
+            <div>
+              <div class="card-title">${card.title}</div>
+              <div class="card-house">${card.house}</div>
+              ${hasErrata ? '<div class="errata">ERRATA → Tap to view</div>' : ''}
+            </div>
+          `;
+          if (hasErrata) {
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+              const modal = document.createElement('div');
+              modal.style.position = 'fixed';
+              modal.style.inset = '0';
+              modal.style.background = 'rgba(0,0,0,0.9)';
+              modal.style.display = 'flex';
+              modal.style.alignItems = 'center';
+              modal.style.justifyContent = 'center';
+              modal.style.padding = '20px';
+              modal.style.zIndex = '9999';
+              modal.innerHTML = `
+                <div class="errata-text" style="max-width:500px;">
+                  <h3 style="margin-top:0;">${card.title} (Errata)</h3>
+                  <p>${ERRATA[card.title].replace(/⚡/g, 'Aember').replace(//g, 'Damage')}</p>
+                  <button onclick="this.closest('div').remove()" style="margin-top:16px; padding:10px 20px; background:#c00; color:white; border:none; border-radius:8px;">Close</button>
+                </div>
+              `;
+              document.body.appendChild(modal);
+            };
+          }
+          cardsDiv.appendChild(div);
+        });
+
+        // Cache for offline
+        localStorage.setItem('lastDeck', JSON.stringify({ uuid, data, time: Date.now() }));
+
+      } catch (e) {
+        deckName.textContent = 'Deck Not Found';
+        cardsDiv.innerHTML = `
+          <p style="color:#f88; text-align:center;">
+            This deck isn't in DoK yet.<br><br>
+            <strong>How to fix:</strong><br>
+            1. Open in <strong>Master Vault</strong> app<br>
+            2. Tap Share → "Open in DoK"<br>
+            3. Try scanning again!
+          </p>
+        `;
+      }
+    }
+
+    // Optional: Load last deck on startup
+    window.addEventListener('load', () => {
+      const cached = localStorage.getItem('lastDeck');
+      if (cached) {
+        const { uuid, data } = JSON.parse(cached);
+        if (Date.now() - data.time < 24*60*60*1000) {
+          // Load from cache
+          deckDiv.style.display = 'block';
+          deckName.textContent = data.deck.name;
+          // ... render cards (omitted for brevity)
+        }
+      }
+    });
+  </script>
+
+  <!-- PWA Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
