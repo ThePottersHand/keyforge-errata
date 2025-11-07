@@ -3,35 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KeyForge Errata Scanner</title>
+  <title>KF Errata Scanner</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="https://www.keyforgemastervault.com/favicon.ico">
   <meta name="theme-color" content="#111111">
   <style>
-    :root { --bg: #111; --text: #eee; --accent: #0066cc; --errata: #ff4444; }
+    :root { --bg: #111; --text: #eee; --accent: #0066cc; --errata: #ff4444; --green: #0f0; }
     * { box-sizing: border-box; }
     body { margin:0; padding:16px; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; }
     h1 { text-align:center; margin:0 0 8px; font-size:1.8em; }
     p { text-align:center; margin:8px 0 16px; color:#aaa; }
-    
-    /* FIX 1: Force video to be visible and full size */
-    #scanner {
-      width: 100% !important;
-      max-width: 500px;
-      height: 300px !important;
-      margin: 16px auto;
-      display: block;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      background: #000 !important;
-      object-fit: cover;
-    }
-
-    button {
-      width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px;
-      background:var(--accent); color:white; border:none; border-radius:12px; font-weight:600;
-    }
+    #reader { width:100%; max-width:500px; margin:16px auto; height:300px; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.5); background:#000; border: 3px solid transparent; }
+    #reader.scanning { border-color: var(--green); }
+    button { width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px; background:var(--accent); color:white; border:none; border-radius:12px; font-weight:600; }
     #deck { margin-top:24px; display:none; }
     .card { display:flex; align-items:center; padding:12px; border-bottom:1px solid #333; border-radius:8px; margin-bottom:8px; background:#1a1a1a; }
     .card img { width:60px; height:84px; margin-right:14px; border-radius:6px; object-fit:cover; }
@@ -39,27 +23,25 @@
     .card-house { font-size:0.85em; color:#999; margin-top:2px; }
     .errata { color:var(--errata); font-weight:bold; font-size:0.9em; margin-top:4px; }
     .errata-text { background:#300; padding:12px; border-radius:8px; margin:12px 0; font-size:0.95em; line-height:1.5; }
-    .hidden { display:none; }
-    .loading { text-align:center; color:#aaa; }
     #status { text-align:center; color:#aaa; margin:10px 0; font-weight:600; }
+    #debug { background:#222; padding:10px; border-radius:8px; font-family:monospace; font-size:0.8em; color:#0f0; margin:10px 0; display:none; }
   </style>
 </head>
 <body>
   <h1>KeyForge Errata Scanner</h1>
-  <p>Point your camera at any deck QR code</p>
-  <div id="status">Tap below to start</div>
+  <p>Point at deck QR code</p>
+  <div id="status">Ready</div>
+  <div id="debug"></div>
   
-  <!-- FIX 2: Add visible container + force playsinline -->
-  <div id="reader" style="width:100%; max-width:500px; margin:0 auto; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.5); background:#000;"></div>
+  <div id="reader"></div>
   
   <button onclick="startScanner()">Start Scanner</button>
 
   <div id="deck">
-    <h2 id="deck-name" class="loading">Loading deck...</h2>
+    <h2 id="deck-name">Loading...</h2>
     <div id="cards"></div>
   </div>
 
-  <!-- html5-qrcode -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
@@ -67,46 +49,50 @@
     const deckName = document.getElementById('deck-name');
     const cardsDiv = document.getElementById('cards');
     const status = document.getElementById('status');
-    const readerDiv = document.getElementById('reader');
+    const debug = document.getElementById('debug');
+    const reader = document.getElementById('reader');
     let html5QrCode;
 
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
 
     const ERRATA = { /* ... same as before ... */ };
 
+    function log(msg) {
+      debug.style.display = 'block';
+      debug.textContent = msg;
+      console.log('[KF Scanner]', msg);
+    }
+
     function startScanner() {
-      status.textContent = 'Requesting camera...';
+      status.textContent = 'Starting camera...';
+      log('Camera requested');
       
-      // FIX 3: Use div ID, not video element
       html5QrCode = new Html5Qrcode("reader");
       
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1,
-        // Force back camera + video constraints
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-      };
-
       html5QrCode.start(
         { facingMode: "environment" },
-        config,
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
+          log(`QR detected: ${decodedText}`);
+          reader.classList.add('scanning');
+          
           const uuid = extractUuid(decodedText);
           if (uuid) {
+            log(`UUID found: ${uuid}`);
             stopScanner();
             loadDeck(uuid);
+          } else {
+            log(`No UUID in: ${decodedText}`);
           }
         },
-        (error) => {
-          console.warn('Scan frame error (normal):', error);
-        }
+        () => {}
       ).then(() => {
-        status.textContent = 'Scanning... Point at QR code';
+        status.textContent = 'Scanning...';
+        reader.classList.add('scanning');
         document.querySelector('button').style.display = 'none';
-      }).catch((err) => {
-        status.textContent = `Error: ${err}`;
-        console.error(err);
+      }).catch(err => {
+        status.textContent = 'Camera failed';
+        log(`Error: ${err}`);
       });
     }
 
@@ -114,26 +100,33 @@
       if (html5QrCode) {
         html5QrCode.stop().then(() => {
           html5QrCode.clear();
-          readerDiv.innerHTML = '';
+          reader.classList.remove('scanning');
         });
       }
       document.querySelector('button').style.display = 'block';
-      status.textContent = 'Stopped.';
+      status.textContent = 'Tap to scan again';
     }
 
     function extractUuid(text) {
-      const urlMatch = text.match(/deck-details[\/.]([a-f0-9-]{36})/i);
-      if (urlMatch) return urlMatch[1];
-      const uuidMatch = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-      return uuidMatch ? uuidMatch[0] : null;
-    }
+      // Match ANY 36-char UUID in the string
+      const match = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
+      if (match) return match[0];
 
-    // ... rest of loadDeck() same as before ...
+      // Fallback: try to get last part of URL
+      try {
+        const url = new URL(text);
+        const parts = url.pathname.split('/');
+        const last = parts[parts.length - 1];
+        if (last.length === 36 && last.includes('-')) return last;
+      } catch {}
+
+      return null;
+    }
 
     async function loadDeck(uuid) {
       deckDiv.style.display = 'block';
       deckName.textContent = 'Loading...';
-      cardsDiv.innerHTML = '<p class="loading">Fetching from Decks of KeyForge...</p>';
+      cardsDiv.innerHTML = '<p style="text-align:center;color:#aaa">Fetching from DoK...</p>';
 
       try {
         const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
@@ -142,7 +135,7 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        if (!data.deck?._links) throw new Error("Deck not found");
+        if (!data.deck) throw new Error("No deck data");
 
         deckName.textContent = data.deck.name || 'Unknown Deck';
         cardsDiv.innerHTML = '';
@@ -166,19 +159,10 @@
           cardsDiv.appendChild(div);
         });
 
-        localStorage.setItem('lastDeck', JSON.stringify({ uuid, data, time: Date.now() }));
-
       } catch (e) {
-        deckName.textContent = 'Deck Not Found';
-        cardsDiv.innerHTML = `
-          <p style="color:#f88; text-align:center;">
-            This deck isn't in DoK yet.<br><br>
-            <strong>How to fix:</strong><br>
-            1. Open in <strong>Master Vault</strong> app<br>
-            2. Tap Share → "Open in DoK"<br>
-            3. Try scanning again!
-          </p>
-        `;
+        deckName.textContent = 'Not in DoK';
+        cardsDiv.innerHTML = '<p style="color:#f88;text-align:center">Open in Master Vault → Share → "Open in DoK"</p>';
+        log(`Load failed: ${e.message}`);
       }
     }
 
@@ -188,16 +172,15 @@
       modal.innerHTML = `
         <div class="errata-text" style="max-width:500px;">
           <h3 style="margin-top:0;">${title} (Errata)</h3>
-          <p>${ERRATA[title].replace(/⚡/g, 'Aember').replace(//g, 'Damage')}</p>
+          <p>${ERRATA[title]}</p>
           <button onclick="this.closest('div').remove()" style="margin-top:16px;padding:10px 20px;background:#c00;color:white;border:none;border-radius:8px;">Close</button>
         </div>
       `;
       document.body.appendChild(modal);
     }
 
-    // PWA
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(console.error);
+      navigator.serviceWorker.register('sw.js').catch(() => {});
     }
   </script>
 </body>
