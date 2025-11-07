@@ -3,24 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KeyForge Errata Scanner – DEBUG</title>
+  <title>KeyForge Errata Scanner</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="https://www.keyforgemastervault.com/favicon.ico">
   <meta name="theme-color" content="#111111">
   <style>
-    :root { --bg:#111; --txt:#eee; --acc:#0066cc; --err:#ff4444; }
-    * { box-sizing:border-box; }
-    body { margin:0; padding:16px; background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,sans-serif; }
-    h1 { text-align:center; margin:0 0 8px; font-size:1.8em; }
-    p { text-align:center; margin:8px 0 16px; color:#aaa; }
-    #reader { width:100%; max-width:500px; margin:16px auto; height:300px; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.5); background:#000; }
-    button { width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px; background:var(--acc); color:white; border:none; border-radius:12px; font-weight:600; }
+    body { margin:0; padding:16px; background:#111; color:#eee; font-family:system-ui; }
+    h1 { text-align:center; font-size:1.8em; margin:0 0 8px; }
+    p { text-align:center; color:#aaa; margin:8px 0 16px; }
+    #reader { width:100%; max-width:500px; margin:16px auto; height:300px; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(00,0,0,.5); background:#000; }
+    button { width:100%; max-width:500px; margin:16px auto; display:block; padding:14px; font-size:18px; background:#0066cc; color:white; border:none; border-radius:12px; }
     #deck { margin-top:24px; display:none; }
     .card { display:flex; align-items:center; padding:12px; border-bottom:1px solid #333; border-radius:8px; margin-bottom:8px; background:#1a1a1a; }
-    .card img { width:60px; height:84px; margin-right:14px; border-radius:6px; object-fit:cover; }
+    .card img { width:60px; height:84px; margin-right:14px; border-radius:6px; }
     .card-title { font-weight:600; font-size:1.1em; }
     .card-house { font-size:0.85em; color:#999; margin-top:2px; }
-    .errata { color:var(--err); font-weight:bold; font-size:0.9em; margin-top:4px; }
+    .errata { color:#ff4444; font-weight:bold; font-size:0.9em; margin-top:4px; }
     #status { text-align:center; color:#0cf; margin:10px 0; font-weight:600; }
     .debug { margin-top:20px; padding:12px; background:#222; border-radius:8px; font-family:monospace; font-size:0.85em; max-height:250px; overflow:auto; border:1px solid #444; }
     .debug img { max-width:100%; margin-top:8px; border-radius:6px; }
@@ -37,7 +34,7 @@
 
   <button onclick="startScanner()">Start Scanner</button>
 
-  <!-- DEBUG PANEL – ALWAYS VISIBLE -->
+  <!-- DEBUG PANEL -->
   <div id="debug" class="debug">
     <strong>OCR Debug Log</strong><br>
     <span id="log"></span>
@@ -49,8 +46,8 @@
     <div id="cards"></div>
   </div>
 
+  <!-- TESSERACT ONLY -->
   <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
     const status   = document.getElementById('status');
@@ -60,12 +57,12 @@
     const deckName = document.getElementById('deck-name');
     const cardsDiv = document.getElementById('cards');
 
-    let scanner, worker, lastOcr = 0;
+    let worker, video, lastOcr = 0;
 
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
 
     // -----------------------------------------------------------------
-    // DEBUG LOGGING
+    // DEBUG LOG
     // -----------------------------------------------------------------
     function dbg(msg, imgUrl = null) {
       const ts = new Date().toLocaleTimeString();
@@ -80,14 +77,13 @@
     }
 
     // -----------------------------------------------------------------
-    // START SCANNER
+    // START SCANNER (CAMERA + OCR ONLY)
     // -----------------------------------------------------------------
     async function startScanner() {
       dbg('Initializing Tesseract…');
       status.textContent = 'Initializing OCR…';
 
       try {
-        // ---- 1. Create worker -------------------------------------------------
         worker = await Tesseract.createWorker({
           logger: m => {
             if (m.status === 'recognizing text') {
@@ -105,88 +101,75 @@
         });
         dbg('Tesseract ready');
 
-        // ---- 2. Start camera --------------------------------------------------
-        scanner = new Html5Qrcode("reader");
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 5 },
-          async () => {
-            const now = Date.now();
-            if (now - lastOcr < 2000) return;   // OCR every 2 seconds
-            lastOcr = now;
+        // Start camera (no QR library!)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: 1280, height: 720 }
+        });
+        video = document.createElement('video');
+        video.srcObject = stream;
+        video.playsInline = true;
+        video.onloadedmetadata = () => video.play();
+        document.getElementById('reader').innerHTML = '';
+        document.getElementById('reader').appendChild(video);
 
-            const video = document.querySelector('#reader video');
-            if (!video || video.videoWidth === 0) {
-              dbg('Warning: Video element not ready yet');
-              return;
-            }
-
-            // ---- 3. Capture & preprocess ------------------------------------
-            const canvas = document.createElement('canvas');
-            canvas.width  = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-
-            // Crop top 30%
-            const cropH = canvas.height * 0.30;
-            const cropped = ctx.getImageData(0, 0, canvas.width, cropH);
-
-            // Upscale 2× for better OCR
-            const up = document.createElement('canvas');
-            up.width  = canvas.width  * 2;
-            up.height = cropH * 2;
-            const uctx = up.getContext('2d');
-            uctx.imageSmoothingEnabled = false;
-            uctx.drawImage(canvas, 0, 0, canvas.width, cropH, 0, 0, up.width, up.height);
-
-            const imgUrl = up.toDataURL();
-            dbg('Running OCR on cropped image…', imgUrl);
-            status.textContent = 'Reading text…';
-
-            // ---- 4. OCR -------------------------------------------------------
-            const result = await worker.recognize(up);
-            const raw = result.data.text.trim();
-            dbg(`RAW OCR: "${raw}"`);
-
-            const name = cleanName(raw);
-            if (name) {
-              dbg(`CLEAN NAME: "${name}" → Searching DoK…`);
-              stopScanner();
-              searchDoK(name);
-            } else {
-              dbg('No usable name – keep scanning…');
-            }
-          },
-          err => console.warn('QR frame error (normal):', err)
-        );
-
-        status.textContent = 'Scanning… (OCR every 2 s)';
+        status.textContent = 'Camera ready – point at deck name';
         document.querySelector('button').style.display = 'none';
-        dbg('Camera started – point at deck name');
+        dbg('Camera started');
+
+        // OCR loop
+        const ocrLoop = async () => {
+          if (!video || video.readyState < 2) return requestAnimationFrame(ocrLoop);
+          const now = Date.now();
+          if (now - lastOcr < 2500) return requestAnimationFrame(ocrLoop); // every 2.5s
+          lastOcr = now;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0);
+
+          // Crop top 30%
+          const cropH = canvas.height * 0.3;
+          const cropped = ctx.getImageData(0, 0, canvas.width, cropH);
+
+          // Upscale 2x
+          const up = document.createElement('canvas');
+          up.width = canvas.width * 2;
+          up.height = cropH * 2;
+          const uctx = up.getContext('2d');
+          uctx.imageSmoothingEnabled = false;
+          uctx.drawImage(canvas, 0, 0, canvas.width, cropH, 0, 0, up.width, up.height);
+
+          const imgUrl = up.toDataURL();
+          dbg('Running OCR...', imgUrl);
+          status.textContent = 'Reading text…';
+
+          const result = await worker.recognize(up);
+          const text = result.data.text.trim();
+          dbg(`OCR RESULT: "${text}"`);
+
+          const name = cleanName(text);
+          if (name) {
+            dbg(`FOUND: "${name}" → Searching DoK…`);
+            searchDoK(name);
+            return; // stop loop
+          } else {
+            dbg('No deck name – keep scanning…');
+          }
+          requestAnimationFrame(ocrLoop);
+        };
+        requestAnimationFrame(ocrLoop);
 
       } catch (e) {
         dbg(`ERROR: ${e.message}`);
-        status.textContent = 'Failed – check console';
+        status.textContent = 'Failed';
         console.error(e);
       }
     }
 
-    // -----------------------------------------------------------------
-    // STOP SCANNER
-    // -----------------------------------------------------------------
-    function stopScanner() {
-      if (scanner) scanner.stop();
-      if (worker) worker.terminate();
-      document.querySelector('button').style.display = 'block';
-      status.textContent = 'Stopped – tap to restart';
-    }
-
-    // -----------------------------------------------------------------
-    // CLEAN DECK NAME
-    // -----------------------------------------------------------------
-    function cleanName(text) {
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+    function cleanName(t) {
+      const lines = t.split('\n').map(l => l.trim()).filter(l => l.length > 5);
       if (!lines.length) return null;
       let n = lines[0];
       n = n.replace(/KeyForge|Deck|Name|Archon|Æmber/gi, '').trim();
@@ -194,9 +177,6 @@
       return (n.includes(',') || n.length > 12) ? n : null;
     }
 
-    // -----------------------------------------------------------------
-    // SEARCH DoK
-    // -----------------------------------------------------------------
     async function searchDoK(name) {
       deckDiv.style.display = 'block';
       deckName.textContent = `Searching: "${name}"`;
@@ -207,59 +187,41 @@
           headers: { 'Api-Key': API_KEY }
         });
         const d = await r.json();
-
         const exact = d.decks?.find(x => x.name.toLowerCase() === name.toLowerCase());
-        if (exact) {
-          loadDeck(exact.id, exact.name);
-        } else if (d.decks?.length) {
+        if (exact) loadDeck(exact.id, exact.name);
+        else if (d.decks?.length) {
           const first = d.decks[0];
           deckName.textContent = `Found: "${first.name}"`;
-          cardsDiv.innerHTML = `<p style="text-align:center"><button onclick="loadDeck('${first.id}','${first.name}')" style="background:#0c6;padding:10px 20px;border:none;border-radius:8px;color:white;">Load This Deck</button></p>`;
-        } else {
-          throw new Error();
-        }
+          cardsDiv.innerHTML = `<p style="text-align:center"><button onclick="loadDeck('${first.id}','${first.name}')" style="background:#0c6;padding:10px 20px;border:none;border-radius:8px;color:white;">Load</button></p>`;
+        } else throw new Error();
       } catch {
         deckName.textContent = 'Not in DoK';
         cardsDiv.innerHTML = `<p style="color:#f88;text-align:center">"<strong>${name}</strong>" not found.<br><a href="https://decksofkeyforge.com/decks/import" target="_blank" style="color:#0cf">Import to DoK</a></p>`;
       }
     }
 
-    // -----------------------------------------------------------------
-    // LOAD DECK (global for button)
-    // -----------------------------------------------------------------
     window.loadDeck = async function(uuid, name) {
-      deckName.textContent = 'Loading cards…';
-      cardsDiv.innerHTML = '<p style="text-align:center;color:#aaa">Fetching cards…</p>';
-      try {
-        const r = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, { headers: { 'Api-Key': API_KEY } });
-        const d = await r.json();
-        deckName.textContent = name;
-        cardsDiv.innerHTML = '';
-        d._linked.cards.forEach(c => {
-          const div = document.createElement('div');
-          div.className = 'card';
-          const err = ERRATA[c.title];
-          div.innerHTML = `<img src="${c.image_url}" loading="lazy"><div><div class="card-title">${c.title}</div><div class="card-house">${c.house}</div>${err?'<div class="errata">ERRATA → Tap</div>':''}</div>`;
-          if (err) div.onclick = () => alert(`${c.title}\n\n${ERRATA[c.title]}`);
-          cardsDiv.appendChild(div);
-        });
-      } catch {
-        cardsDiv.innerHTML = '<p style="color:#f88">Failed to load deck.</p>';
-      }
+      deckName.textContent = 'Loading…';
+      const r = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, { headers: { 'Api-Key': API_KEY } });
+      const d = await r.json();
+      deckName.textContent = name;
+      cardsDiv.innerHTML = '';
+      d._linked.cards.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        const err = ERRATA[c.title];
+        div.innerHTML = `<img src="${c.image_url}" loading="lazy"><div><div class="card-title">${c.title}</div><div class="card-house">${c.house}</div>${err?'<div class="errata">ERRATA → Tap</div>':''}</div>`;
+        if (err) div.onclick = () => alert(`${c.title}\n\n${ERRATA[c.title]}`);
+        cardsDiv.appendChild(div);
+      });
     };
 
-    // -----------------------------------------------------------------
-    // ERRATA DB (shortened for brevity – paste your full list)
-    // -----------------------------------------------------------------
     const ERRATA = {
       "Arcenomometer": "Enhance two. Action: During your opponent’s next turn, each time they play a card, they lose 1 Aember.",
       "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
-      // ... keep the rest of your list here ...
+      // ... your full list
     };
 
-    // -----------------------------------------------------------------
-    // SERVICE WORKER
-    // -----------------------------------------------------------------
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   </script>
 </body>
