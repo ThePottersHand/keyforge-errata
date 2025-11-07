@@ -29,29 +29,30 @@
     .import { color:#0cf; }
     #suggestions { max-height:200px; overflow:auto; }
     .error { color:#f88; font-size:0.9em; text-align:center; }
+    .debug { background:#222; padding:8px; border-radius:6px; font-family:monospace; font-size:0.8em; margin-top:8px; }
   </style>
 </head>
 <body>
   <h1>KeyForge Errata Scanner</h1>
-  <p>Type your deck name (searches after 4+ chars)</p>
-  
+  <p>Type your deck name (partial works – e.g. “Grouseribius”)</p>
+
   <input type="text" id="deckInput" placeholder="e.g. Grouseribius, the Bucolic Labs Zoomaster" autofocus>
   <button onclick="searchDeck()">Search Deck</button>
 
   <div id="suggestions"></div>
 
   <div id="deck">
-    <h2 id="deck-name" class="loading">Searching...</h2>
+    <h2 id="deck-name" class="loading">Searching…</h2>
     <div id="cards"></div>
   </div>
 
   <script>
     const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
-    const input = document.getElementById('deckInput');
+    const input          = document.getElementById('deckInput');
     const suggestionsDiv = document.getElementById('suggestions');
-    const deckDiv = document.getElementById('deck');
-    const deckName = document.getElementById('deck-name');
-    const cardsDiv = document.getElementById('cards');
+    const deckDiv        = document.getElementById('deck');
+    const deckName       = document.getElementById('deck-name');
+    const cardsDiv       = document.getElementById('cards');
 
     const ERRATA = {
       "Arcenomometer": "Enhance two. Action: During your opponent’s next turn, each time they play a card, they lose 1 Aember.",
@@ -78,87 +79,87 @@
       "Offering to Kiligog": "Omni: Destroy a friendly creature. If you do, choose a creature in your discard pile. Place it facedown under Offering to Kiligog. Omni: Make each card under Offering to Kiligog a token creature as if the card was on top of your deck.",
       "Pain Reaction": "Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature's neighbors after it leaves play.",
       "Ragatha": "Treachery. After an enemy creature reaps, deal 3 damage to each of Ragatha's neighbors.",
-      "Sample 42-C": "Action: Move 1 Aember from your opponent's pool to Sample 42-C. If there are 4 Aember or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your Aember (rounding down).",
-      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner's hand instead.",
+      "Sample 42-C": "Action: Move 1 Aember from your opponent’s pool to Sample 42-C. If there are 4 Aember or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your Aember (rounding down).",
+      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner’s hand instead.",
       "Shrink-ray Technician": "After Reap: Choose an enemy creature. It gets -2 power until the end of the turn. Scrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
       "Space Invaders": "Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
       "Tendrils of Pain": "Play: Deal 1 damage to each creature. Deal 4 damage to each creature instead if your opponent forged a key on their previous turn.",
-      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner's hand instead.",
+      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
       "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
     };
 
-    // Auto-search on typing (debounced, min 4 chars)
-    let searchTimeout;
+    /* --------------------------------------------------------------
+       AUTO-SUGGESTIONS (debounced, min 4 chars)
+       -------------------------------------------------------------- */
+    let suggestTimer;
     input.addEventListener('input', () => {
-      clearTimeout(searchTimeout);
-      const query = input.value.trim();
+      clearTimeout(suggestTimer);
+      const q = input.value.trim();
       suggestionsDiv.innerHTML = '';
-      if (query.length < 4) return;
-      searchTimeout = setTimeout(() => showSuggestions(query), 500);
+      if (q.length < 4) return;
+      suggestTimer = setTimeout(() => fetchSuggestions(q), 400);
     });
 
-    // Enter key searches
-    input.addEventListener('keypress', e => {
-      if (e.key === 'Enter') searchDeck();
-    });
-
-    async function showSuggestions(query) {
+    async function fetchSuggestions(query) {
       try {
-        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(query)}`, {
+        const r = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(query)}`, {
           headers: { 'Api-Key': API_KEY }
         });
-        if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
-        const data = await res.json();
-
+        if (!r.ok) throw new Error(`API ${r.status}`);
+        const d = await r.json();
         suggestionsDiv.innerHTML = '';
-        if (data.decks && data.decks.length > 0) {
-          data.decks.slice(0, 5).forEach(deck => {
-            const btn = document.createElement('button');
-            btn.className = 'suggestion';
-            btn.innerHTML = `"${deck.name}" <small style="color:#aaa;">(${deck.expansion?.name || 'Unknown'})</small>`;
-            btn.onclick = () => loadDeck(deck.id, deck.name);
-            suggestionsDiv.appendChild(btn);
+        if (d.decks && d.decks.length) {
+          d.decks.slice(0, 5).forEach(deck => {
+            const b = document.createElement('button');
+            b.className = 'suggestion';
+            b.innerHTML = `"${deck.name}" <small style="color:#aaa;">(${deck.expansion?.name||'Unknown'})</small>`;
+            b.onclick = () => loadDeck(deck.id, deck.name);
+            suggestionsDiv.appendChild(b);
           });
-        } else {
-          suggestionsDiv.innerHTML = '<p style="color:#aaa;text-align:center;">No suggestions</p>';
         }
       } catch (e) {
-        suggestionsDiv.innerHTML = `<p class="error">Search failed: ${e.message}</p>`;
+        suggestionsDiv.innerHTML = `<p class="error">Suggestion error: ${e.message}</p>`;
       }
     }
 
+    /* --------------------------------------------------------------
+       ENTER KEY SEARCH
+       -------------------------------------------------------------- */
+    input.addEventListener('keypress', e => { if (e.key === 'Enter') searchDeck(); });
+
+    /* --------------------------------------------------------------
+       MAIN SEARCH
+       -------------------------------------------------------------- */
     async function searchDeck() {
       const name = input.value.trim();
-      if (name.length < 4) {
-        alert('Enter at least 4 characters');
-        return;
-      }
+      if (name.length < 4) { alert('Enter at least 4 characters'); return; }
 
       deckDiv.style.display = 'block';
       deckName.textContent = `Searching: "${name}"`;
-      cardsDiv.innerHTML = '<p class="loading">Querying DoK...</p>';
+      cardsDiv.innerHTML = '<p class="loading">Querying DoK…</p>';
       suggestionsDiv.innerHTML = '';
 
       try {
-        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(name)}`, {
+        const r = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/search?q=${encodeURIComponent(name)}`, {
           headers: { 'Api-Key': API_KEY }
         });
-        if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
-        const data = await res.json();
+        if (!r.ok) throw new Error(`API ${r.status}`);
+        const d = await r.json();
 
-        const normalizedQuery = name.toLowerCase().replace(/[^\w\s,]/g, '').trim();  // Fuzzy: remove punctuation
-        const exact = data.decks?.find(d => 
-          d.name.toLowerCase().replace(/[^\w\s,]/g, '').trim() === normalizedQuery
-        );
+        const norm = n => n.toLowerCase().replace(/[^\w\s,]/g, '').trim();
+        const qNorm = norm(name);
+        const exact = d.decks?.find(x => norm(x.name) === qNorm);
+
         if (exact) {
           loadDeck(exact.id, exact.name);
-        } else if (data.decks?.length > 0) {
-          deckName.innerHTML = `No exact match for "${name}". Top results:`;
+        } else if (d.decks?.length) {
+          deckName.innerHTML = `No exact match – top results:`;
           cardsDiv.innerHTML = '';
-          data.decks.slice(0, 10).forEach(deck => {
+          d.decks.slice(0, 10).forEach(deck => {
             const div = document.createElement('div');
             div.className = 'suggestion';
-            div.innerHTML = `<strong>"${deck.name}"</strong> <small style="color:#aaa;">(${deck.expansion?.name || 'Unknown'})</small><br><button onclick="loadDeck('${deck.id}', '${deck.name}')" style="margin-top:4px;padding:6px 12px;background:#0c6;border:none;border-radius:6px;color:white;font-size:0.8em;">Load This Deck</button>`;
+            div.innerHTML = `<strong>"${deck.name}"</strong> <small style="color:#aaa;">(${deck.expansion?.name||'Unknown'})</small><br>
+                             <button onclick="loadDeck('${deck.id}','${deck.name}')" style="margin-top:4px;padding:6px 12px;background:#0c6;border:none;border-radius:6px;color:white;font-size:0.8em;">Load This Deck</button>`;
             cardsDiv.appendChild(div);
           });
         } else {
@@ -166,54 +167,51 @@
         }
       } catch (e) {
         deckName.textContent = 'Search Failed';
-        cardsDiv.innerHTML = `
-          <p class="notfound">
-            Error: ${e.message}<br><br>
-            Try a longer query or <a href="https://decksofkeyforge.com/decks/import" target="_blank" class="import">import to DoK</a>.
-          </p>
-        `;
+        cardsDiv.innerHTML = `<p class="notfound">
+          Error: ${e.message}<br><br>
+          Try a shorter query or <a href="https://decksofkeyforge.com/decks/import" target="_blank" class="import">import to DoK</a>.
+        </p>`;
       }
     }
 
+    /* --------------------------------------------------------------
+       LOAD DECK (global for buttons)
+       -------------------------------------------------------------- */
     window.loadDeck = async function(uuid, displayName) {
-      deckName.textContent = 'Loading cards...';
-      cardsDiv.innerHTML = '<p class="loading">Fetching from DoK...</p>';
+      deckName.textContent = 'Loading cards…';
+      cardsDiv.innerHTML = '<p class="loading">Fetching from DoK…</p>';
       suggestionsDiv.innerHTML = '';
 
       try {
-        const res = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
+        const r = await fetch(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`, {
           headers: { 'Api-Key': API_KEY }
         });
-        if (!res.ok) throw new Error(`Load failed: ${res.status}`);
-        const data = await res.json();
+        if (!r.ok) throw new Error(`Load failed: ${r.status}`);
+        const d = await r.json();
 
         deckName.textContent = displayName;
         cardsDiv.innerHTML = '';
 
-        data._linked.cards.forEach(card => {
+        d._linked.cards.forEach(card => {
           const div = document.createElement('div');
           div.className = 'card';
-          const hasErrata = ERRATA[card.title];
-          div.innerHTML = `
-            <img src="${card.image_url}" alt="${card.title}" loading="lazy">
-            <div>
-              <div class="card-title">${card.title}</div>
-              <div class="card-house">${card.house}</div>
-              ${hasErrata ? '<div class="errata">ERRATA → Tap to view</div>' : ''}
-            </div>
-          `;
-          if (hasErrata) {
+          const err = ERRATA[card.title];
+          div.innerHTML = `<img src="${card.image_url}" loading="lazy">
+                           <div>
+                             <div class="card-title">${card.title}</div>
+                             <div class="card-house">${card.house}</div>
+                             ${err ? '<div class="errata">ERRATA → Tap</div>' : ''}
+                           </div>`;
+          if (err) {
             div.style.cursor = 'pointer';
             div.onclick = () => {
               const modal = document.createElement('div');
-              modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999;';
-              modal.innerHTML = `
-                <div style="background:#300;padding:20px;border-radius:12px;max-width:500px;color:#eee;">
-                  <h3 style="margin-top:0;">${card.title} (Errata)</h3>
-                  <p style="line-height:1.5;">${ERRATA[card.title]}</p>
-                  <button onclick="this.closest('div').remove()" style="margin-top:16px;padding:10px 20px;background:#c00;color:white;border:none;border-radius:8px;">Close</button>
-                </div>
-              `;
+              modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999;';
+              modal.innerHTML = `<div style="background:#300;padding:20px;border-radius:12px;max-width:500px;color:#eee;">
+                <h3 style="margin-top:0;">${card.title} (Errata)</h3>
+                <p style="line-height:1.5;">${ERRATA[card.title]}</p>
+                <button onclick="this.closest('div').remove()" style="margin-top:16px;padding:10px 20px;background:#c00;color:white;border:none;border-radius:8px;">Close</button>
+              </div>`;
               document.body.appendChild(modal);
             };
           }
@@ -224,7 +222,9 @@
       }
     };
 
-    // PWA
+    /* --------------------------------------------------------------
+       PWA
+       -------------------------------------------------------------- */
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
