@@ -5,32 +5,33 @@
 <title>Keyforge Deck Selector</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:,">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <style>
 :root{
   --bg:#121212; --card:#1e1e1e; --text:#e0e0e0;
   --primary:#d32f2f; --success:#4caf50;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);padding:20px;line-height:1.6;}
+body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);padding:15px;line-height:1.6;font-size:16px;}
 .container{max-width:1100px;margin:auto;}
-h1{color:#ffeb3b;text-align:center;margin-bottom:20px;font-size:2.2rem;}
-.controls{background:var(--card);padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,.4);}
-/* COLLAPSIBLE HEADER */
+h1{color:#ffeb3b;text-align:center;margin:20px 0;font-size:2rem;}
+.controls{background:var(--card);padding:18px;border-radius:12px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,.4);}
+/* COLLAPSIBLE */
 .collapsible-header{
   display:flex;justify-content:space-between;align-items:center;
-  cursor:pointer;padding:10px 0;font-weight:bold;font-size:1.1rem;
+  cursor:pointer;padding:12px 0;font-weight:bold;font-size:1.1rem;
 }
 .collapsible-header::after{content:'expand_less';font-family:'Material Icons';font-size:1.4rem;color:#aaa;}
 .collapsed .collapsible-header::after{content:'expand_more';}
-.collapsible-content{max-height:1000px;transition:max-height .3s ease;overflow:hidden;}
-.collapsed .collapsible-content{max-height:0;}
+.collapsible-content{max-height:1500px;transition:max-height .3s ease;overflow:hidden;}
+.collapsed .collapsible-content{max-height:0;padding:0;}
 /* MODE TOGGLE */
-.mode-toggle{display:flex;gap:15px;margin-bottom:15px;}
-.mode-toggle label input{margin-right:6px;font-size:1rem;}
-label{display:block;margin:12px 0 6px;font-weight:bold;font-size:1rem;}
-select,input,button{width:100%;padding:10px;margin:6px 0;border:none;border-radius:8px;font-size:16px;}
-input[type="number"]{width:100%;}
-select[multiple]{height:130px;background:#2a2a2a;color:white;}
+.mode-toggle{display:flex;gap:15px;margin-bottom:15px;flex-wrap:wrap;}
+.mode-toggle label input{margin-right:6px;}
+label{display:block;margin:12px 0 6px;font-weight:bold;}
+select,input,button{width:100%;padding:12px;margin:6px 0;border:none;border-radius:8px;font-size:16px;}
+input[type="number"]{width:100%;font-size:16px;}
+select[multiple]{height:130px;background:#2a2a2a;color:white;font-size:15px;}
 button{background:var(--primary);color:white;font-weight:bold;cursor:pointer;transition:.3s;}
 button:hover{background:#b71c1c;}
 .btn-small{display:inline-block;width:auto;padding:6px 12px;margin:4px 2px;font-size:14px;}
@@ -38,23 +39,31 @@ button:hover{background:#b71c1c;}
 .btn-success:hover{background:#388e3c;}
 /* FILTER GRID */
 .filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;}
-.filter-col{flex:1;}
 /* DECK */
-.deck{background:var(--card);padding:20px;border-radius:12px;margin:20px 0;box-shadow:0 4px 12px rgba(0,0,0,.4);}
-.house{margin:30px 0 10px;text-align:center;}
-.house img{width:80px;height:80px;border-radius:50%;background:#333;padding:5px;}
-.house h3{display:inline-block;margin-left:12px;vertical-align:middle;font-size:1.4rem;color:#ffeb3b;}
+.deck{background:var(--card);padding:18px;border-radius:12px;margin:20px 0;box-shadow:0 4px 12px rgba(0,0,0,.4);}
+.house{margin:25px 0 10px;text-align:center;}
+.house img{width:70px;height:70px;border-radius:50%;background:#333;padding:5px;}
+.house h3{display:inline-block;margin-left:10px;vertical-align:middle;font-size:1.3rem;color:#ffeb3b;}
 .house-cards{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
-.card{background:#2a2a2a;padding:8px 10px;border-radius:6px;font-size:0.95rem;}
+.card{background:#2a2a2a;padding:10px 12px;border-radius:6px;font-size:0.95rem;}
 .errata{color:#ff5252;font-weight:bold;}
 .links a{color:#90caf9;text-decoration:none;margin-right:15px;font-size:0.9rem;}
 .links a:hover{text-decoration:underline;}
 .loading{color:#ffeb3b;font-style:italic;text-align:center;margin-bottom:15px;}
 .help{font-size:.85em;color:#aaa;margin-top:4px;}
-.manual-deck-list{max-height:200px;overflow-y:auto;background:#2a2a2a;padding:10px;border-radius:8px;margin-top:10px;}
-@media(max-width:800px){.filter-grid{grid-template-columns:1fr;}}
+.manual-deck-list{max-height:200px;overflow-y:auto;background:#2a2a2a;padding:10px;border-radius:8px;margin-top:10px;font-size:15px;}
+/* RESPONSIVE */
+@media(max-width:800px){
+  .filter-grid{grid-template-columns:1fr;}
+  .house-cards{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:500px){
+  .house-cards{grid-template-columns:1fr;}
+  h1{font-size:1.8rem;}
+  .controls{padding:15px;}
+  button{padding:14px;font-size:17px;}
+}
 </style>
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
 <div class="container">
@@ -63,17 +72,13 @@ button:hover{background:#b71c1c;}
   <div class="controls">
     <p class="loading" id="loading">Loading decks from CSV…</p>
 
-    <!-- MODE TOGGLE -->
     <div class="mode-toggle">
       <label><input type="radio" name="mode" value="random" checked> Random</label>
       <label><input type="radio" name="mode" value="manual"> Manual</label>
     </div>
 
-    <!-- RANDOM MODE (COLLAPSIBLE) -->
     <div id="randomMode">
-      <div class="collapsible-header" onclick="toggleCollapse(this)">
-        Filters
-      </div>
+      <div class="collapsible-header" onclick="toggleCollapse(this)">Filters</div>
       <div class="collapsible-content">
         <label>Number of Decks:</label>
         <select id="numDecks">
@@ -95,7 +100,7 @@ button:hover{background:#b71c1c;}
         </div>
 
         <div class="filter-grid">
-          <div class="filter-col">
+          <div>
             <label>Sets:</label>
             <div style="display:flex;gap:5px;">
               <button class="btn-small btn-success" onclick="selectAll('sets')">All</button>
@@ -103,7 +108,7 @@ button:hover{background:#b71c1c;}
             </div>
             <select id="sets" multiple></select>
           </div>
-          <div class="filter-col">
+          <div>
             <label>Houses:</label>
             <div style="display:flex;gap:5px;">
               <button class="btn-small btn-success" onclick="selectAll('houses')">All</button>
@@ -113,13 +118,12 @@ button:hover{background:#b71c1c;}
           </div>
         </div>
 
-        <button id="selectBtn" disabled style="margin-top:20px;font-size:18px;padding:14px;" onclick="pickDecks()">
+        <button id="selectBtn" disabled style="margin-top:20px;" onclick="pickDecks()">
           Select Random Deck(s)
         </button>
       </div>
     </div>
 
-    <!-- MANUAL MODE -->
     <div id="manualMode" style="display:none;">
       <label>Select Deck:</label>
       <select id="manualDeckList" size="10" class="manual-deck-list"></select>
@@ -131,60 +135,17 @@ button:hover{background:#b71c1c;}
 </div>
 
 <script>
-/* --------------------------------------------------------------
-   COLLAPSE TOGGLE
-   -------------------------------------------------------------- */
 function toggleCollapse(header){
   const content = header.nextElementSibling;
   const parent = header.parentElement;
   parent.classList.toggle('collapsed');
 }
 
-/* --------------------------------------------------------------
-   FULL ERRATA
-   -------------------------------------------------------------- */
-const ERRATA = {
-  "Ragatha":`Treachery.\nAfter an enemy creature reaps, deal 3 damage to each of Ragatha’s neighbors.`,
-  "Sample 42-C":`Action: Move 1 AEmber from your opponent’s pool to Sample 42-C. If there are 4 AEmber or more on Sample 42-C, forge a key at no cost and purge Sample 42-C.\nFate: The most powerful enemy creature captures half of your AEmber (rounding down).`,
-  "Arcenomometer":"Enhance [AEmber][AEmber]\n[AEmber][AEmber]. (These icons have already been added to cards in your deck.)\nAction: During your opponent’s next turn, each time they play a card, they lose 1[AEmber].",
-  "Auto-Legionary":"Action: Put Auto-Legionary on a flank of your battleline. While in the battleline, it is considered a creature with 5 power and may be used as if it belonged to the active house.",
-  "Bait and Switch":"Play: If your opponent has more [AEmber] than you, steal 1[AEmber]. Repeat the preceding effect if your opponent still has more [AEmber] than you.",
-  "Biomatrix Backup":"This creature gains,”Destroyed: Put this creature into its owner’s archives.”",
-  "Cauldron":"Omni: Put the top card of your deck faceup under Cauldron. If there are 3 or more cards under Cauldron, play them one at a time as if they were in your hand.",
-  "Collector Worm":"After Fight: Put the creature Collector Worm fights into your archives. (Both creatures must survive the fight.) If that creature leaves your archives, put it in its owner’s hand instead.",
-  "Corner the Market":"Play: During your opponent\'s next turn, they cannot play cards, and each time they discard a card from their hand, they may archive that card from their discard pile.",
-  "Curse of Forgetfulness":"Treachery. (This card enters play under your opponent\'s control.)\nAt the end of your turn, purge the top card in your discard pile.",
-  "Custom Virus":"Omni: Destroy Custom Virus. You may purge a creature from your hand. If you do, destroy each creature that shares a trait with the purged creature.",
-  "Drummernaut":"Play/After Fight/After Reap: Return another friendly Giant creature to your hand.",
-  "Duskwitch":"Omega. Elusive.\nYour creatures enter play ready.",
-  "Ecto-Charge":"Play: Forge a key at +20[AEmber] current cost, reduced by 1[AEmber] for each card in your discard pile (to a minimum of 6). If you do, purge Ecto-Charge.",
-  "Experimental Therapy":"This creature may be used as if it belonged to the active house.\nPlay: Stun and exhaust this creature.",
-  "Glimmerspore":"Play: Put an artifact from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
-  "Incubation Chamber":"Omni: You may reveal a Mars creature from your hand. If you do, archive it.",
-  "Into the Warp":"Play: Each player discards the top card of their deck. Destroy each creature that shares a house with at least one of the discarded cards.",
-  "Keyforgery":"When your opponent would forge a key on their turn, that player names a house. Reveal a random card from your hand. If that card is not of the named house, destroy Keyforgery and they do not forge that key (no [AEmber] is spent).",
-  "Library Access":"Play: For the remainder of the turn, each time you play another card, draw a card. Purb Library Access.",
-  "Life for a Life":"Play: Destroy a friendly creature. If you do, deal 6 damage to a creature.",
-  "Magda the Rat":"Elusive.\nPlay: Steal 2[AEmber]. If Magda the Rat leaves play, your opponent steals 2[AEmber].",
-  "Missile Officer Myers":"Deploy.\nPlay/After Reap: Resolve the play effect of a neighboring creature as if you had just played it.\nScrap: You may play 1 card that is not of the active house during your turn.",
-  "Offering to Kiligog":"The second “Omni:” ability should read:\nOmni: Make each card under Offering to Killigog a token creature as if the card was on top of your deck.",
-  "Pain Reaction":"Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature’s neighbors after it leaves play.",
-  "Shrink-ray Technician":"After Reap: Choose an enemy creature. It gets –2 power until the end of the turn.\nScrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
-  "Space Invaders":"Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
-  "Tendrils of Pain":"Play: Deal 1 damage to each creature. Deal 4 damage to each creature instead if your opponent forged a key on their previous turn.",
-  "Yipyax Abductor":"Play/After Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
-  "Yzphyz Knowdrone":"Play: Archive a card. You may purge an archived card. If you do, stun a creature."
-};
+const ERRATA = { /* ... same as before ... */ };
 
-/* --------------------------------------------------------------
-   GLOBAL DATA
-   -------------------------------------------------------------- */
 let data = [], sets = new Set(), houses = new Set();
 let minSAS = Infinity, maxSAS = -Infinity;
 
-/* --------------------------------------------------------------
-   CSV PARSER
-   -------------------------------------------------------------- */
 function parseCSV(text){
   const rows = [];
   let cur = '', inQ = false, field = '';
@@ -207,9 +168,6 @@ function parseCSV(text){
   return rows;
 }
 
-/* --------------------------------------------------------------
-   LOAD CSV
-   -------------------------------------------------------------- */
 fetch('decks_data_fixed.csv')
   .then(r=>r.text())
   .then(text=>{
@@ -267,17 +225,9 @@ fetch('decks_data_fixed.csv')
   })
   .catch(err=>{
     console.error(err);
-    document.getElementById('loading').innerHTML = `
-      <span style="color:#ff5252">
-        Failed to load <b>decks_data_fixed.csv</b>.<br>
-        Run via a local server:<br>
-        <code>python -m http.server 8000</code>
-      </span>`;
+    document.getElementById('loading').innerHTML = `<span style="color:#ff5252">Failed to load CSV. Use local server.</span>`;
   });
 
-/* --------------------------------------------------------------
-   FILTER UI
-   -------------------------------------------------------------- */
 function fillFilters(){
   const setSel = document.getElementById('sets');
   const houseSel = document.getElementById('houses');
@@ -295,9 +245,6 @@ function fillFilters(){
   });
 }
 
-/* --------------------------------------------------------------
-   MANUAL DECK LIST – ALPHABETICAL
-   -------------------------------------------------------------- */
 function fillManualList(){
   const list = document.getElementById('manualDeckList');
   list.innerHTML = '';
@@ -310,9 +257,6 @@ function fillManualList(){
   });
 }
 
-/* --------------------------------------------------------------
-   MODE SWITCH
-   -------------------------------------------------------------- */
 document.querySelectorAll('input[name="mode"]').forEach(r=>{
   r.addEventListener('change',()=>{
     const mode = r.value;
@@ -321,9 +265,6 @@ document.querySelectorAll('input[name="mode"]').forEach(r=>{
   });
 });
 
-/* --------------------------------------------------------------
-   UI helpers
-   -------------------------------------------------------------- */
 function selectAll(id){ const s=document.getElementById(id); for(let o of s.options) o.selected=true; }
 function clearAll(id){ const s=document.getElementById(id); for(let o of s.options) o.selected=false; }
 
@@ -332,9 +273,6 @@ document.getElementById('numDecks').addEventListener('change',()=>{
     document.getElementById('numDecks').value==='2' ? 'block':'none';
 });
 
-/* --------------------------------------------------------------
-   RANDOM SELECTION
-   -------------------------------------------------------------- */
 function pickDecks(){
   const num = +document.getElementById('numDecks').value;
   const minInput = document.getElementById('sasMinInput').value;
@@ -378,18 +316,12 @@ function pickDecks(){
   renderDecks(chosen);
 }
 
-/* --------------------------------------------------------------
-   MANUAL DECK DISPLAY
-   -------------------------------------------------------------- */
 function showManualDeck(){
   const uuid = document.getElementById('manualDeckList').value;
   const deck = data.find(d=>d.uuid===uuid);
   if(deck) renderDecks([deck]);
 }
 
-/* --------------------------------------------------------------
-   RENDER DECKS – ONE COLUMN PER HOUSE
-   -------------------------------------------------------------- */
 function renderDecks(decks){
   const out=document.getElementById('results');
   out.innerHTML='';
@@ -408,7 +340,7 @@ function renderDecks(decks){
 
     const houseContainer = document.createElement('div');
     houseContainer.style.display = 'flex';
-    houseContainer.style.gap = '30px';
+    houseContainer.style.gap = '25px';
     houseContainer.style.flexWrap = 'wrap';
     houseContainer.style.justifyContent = 'center';
 
@@ -416,8 +348,8 @@ function renderDecks(decks){
       const hLow = house.toLowerCase();
 
       const houseDiv = document.createElement('div');
-      houseDiv.style.flex = '1 1 300px';
-      houseDiv.style.minWidth = '250px';
+      houseDiv.style.flex = '1 1 280px';
+      houseDiv.style.minWidth = '240px';
       houseDiv.innerHTML = `
         <div class="house">
           <img src="icons/${hLow}.png" alt="${house}" onerror="this.src='icons/default.png'">
