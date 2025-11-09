@@ -1,217 +1,445 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KeyForge Errata Loader</title>
-  <!-- No favicon to avoid errors -->
-  <meta name="theme-color" content="#111111">
-  <style>
-    :root { --bg: #111; --text: #eee; --accent: #0066cc; --errata: #ff4444; }
-    * { box-sizing: border-box; }
-    body { margin:0; padding:16px; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; }
-    h1 { text-align:center; margin:0 0 8px; font-size:1.8em; }
-    p { text-align:center; margin:8px 0 16px; color:#aaa; }
-    input, button { width:100%; max-width:500px; margin:8px auto; display:block; padding:14px; font-size:18px; border-radius:12px; border:1px solid #333; }
-    input { background:#222; color:#eee; }
-    button { background:var(--accent); color:white; border:none; font-weight:600; }
-    #decks-list { display:none; margin-top:24px; }
-    .deck { padding:12px; background:#1a1a1a; border-radius:8px; margin-bottom:8px; cursor:pointer; }
-    .deck h3 { margin:0 0 4px; font-size:1.1em; }
-    .deck p { margin:0; color:#999; font-size:0.9em; }
-    #deck-detail { display:none; margin-top:24px; }
-    .card { display:flex; align-items:center; padding:12px; border-bottom:1px solid #333; background:#1a1a1a; border-radius:8px; margin-bottom:8px; }
-    .card img { width:60px; height:84px; margin-right:14px; border-radius:6px; object-fit:cover; }
-    .card-title { font-weight:600; font-size:1.1em; }
-    .card-house { font-size:0.85em; color:#999; margin-top:2px; }
-    .errata { color:var(--errata); font-weight:bold; font-size:0.9em; margin-top:4px; }
-    .errata-text { background:#300; padding:12px; border-radius:8px; margin:12px 0; font-size:0.95em; line-height:1.5; }
-    .loading { text-align:center; color:#aaa; }
-    .hidden { display:none; }
-    #status { text-align:center; color:#aaa; margin:10px 0; font-weight:600; }
-    .error { color:#f88; }
-  </style>
+<meta charset="UTF-8">
+<title>Keyforge Deck Selector</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --bg:#121212; --card:#1e1e1e; --text:#e0e0e0;
+  --primary:#d32f2f; --success:#4caf50;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);padding:20px;line-height:1.6;}
+.container{max-width:1100px;margin:auto;}
+h1{color:#ffeb3b;text-align:center;margin-bottom:20px;font-size:2.2rem;}
+.controls{background:var(--card);padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,.4);}
+/* COLLAPSIBLE HEADER */
+.collapsible-header{
+  display:flex;justify-content:space-between;align-items:center;
+  cursor:pointer;padding:10px 0;font-weight:bold;font-size:1.1rem;
+}
+.collapsible-header::after{content:'expand_less';font-family:'Material Icons';font-size:1.4rem;color:#aaa;}
+.collapsed .collapsible-header::after{content:'expand_more';}
+.collapsible-content{max-height:1000px;transition:max-height .3s ease;overflow:hidden;}
+.collapsed .collapsible-content{max-height:0;}
+/* MODE TOGGLE */
+.mode-toggle{display:flex;gap:15px;margin-bottom:15px;}
+.mode-toggle label input{margin-right:6px;font-size:1rem;}
+label{display:block;margin:12px 0 6px;font-weight:bold;font-size:1rem;}
+select,input,button{width:100%;padding:10px;margin:6px 0;border:none;border-radius:8px;font-size:16px;}
+input[type="number"]{width:100%;}
+select[multiple]{height:130px;background:#2a2a2a;color:white;}
+button{background:var(--primary);color:white;font-weight:bold;cursor:pointer;transition:.3s;}
+button:hover{background:#b71c1c;}
+.btn-small{display:inline-block;width:auto;padding:6px 12px;margin:4px 2px;font-size:14px;}
+.btn-success{background:var(--success);}
+.btn-success:hover{background:#388e3c;}
+/* FILTER GRID */
+.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;}
+.filter-col{flex:1;}
+/* DECK */
+.deck{background:var(--card);padding:20px;border-radius:12px;margin:20px 0;box-shadow:0 4px 12px rgba(0,0,0,.4);}
+.house{margin:30px 0 10px;text-align:center;}
+.house img{width:80px;height:80px;border-radius:50%;background:#333;padding:5px;}
+.house h3{display:inline-block;margin-left:12px;vertical-align:middle;font-size:1.4rem;color:#ffeb3b;}
+.house-cards{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.card{background:#2a2a2a;padding:8px 10px;border-radius:6px;font-size:0.95rem;}
+.errata{color:#ff5252;font-weight:bold;}
+.links a{color:#90caf9;text-decoration:none;margin-right:15px;font-size:0.9rem;}
+.links a:hover{text-decoration:underline;}
+.loading{color:#ffeb3b;font-style:italic;text-align:center;margin-bottom:15px;}
+.help{font-size:.85em;color:#aaa;margin-top:4px;}
+.manual-deck-list{max-height:200px;overflow-y:auto;background:#2a2a2a;padding:10px;border-radius:8px;margin-top:10px;}
+@media(max-width:800px){.filter-grid{grid-template-columns:1fr;}}
+</style>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
-  <h1>KeyForge Errata Loader</h1>
-  <p>Enter a DoK username to load all decks</p>
-  <input id="username" type="text" placeholder="e.g., ThePottersHand" value="ThePottersHand">
-  <button onclick="loadUserDecks()">Load Decks</button>
-  <div id="status"></div>
+<div class="container">
+  <h1>Keyforge Deck Selector</h1>
 
-  <div id="decks-list">
-    <h2 id="user-decks-count" class="loading">Loading decks...</h2>
-    <div id="decks"></div>
-  </div>
+  <div class="controls">
+    <p class="loading" id="loading">Loading decks from CSV…</p>
 
-  <div id="deck-detail">
-    <h2 id="deck-name"></h2>
-    <div id="cards"></div>
-    <button onclick="backToList()" style="width:auto; margin:16px auto; display:block;">← Back to Decks</button>
-  </div>
+    <!-- MODE TOGGLE -->
+    <div class="mode-toggle">
+      <label><input type="radio" name="mode" value="random" checked> Random</label>
+      <label><input type="radio" name="mode" value="manual"> Manual</label>
+    </div>
 
-  <script>
-    const status = document.getElementById('status');
-    const decksList = document.getElementById('decks-list');
-    const deckDetail = document.getElementById('deck-detail');
-    const usernameInput = document.getElementById('username');
-    const API_KEY = '6ec5419d-5b71-4598-aca5-a8a78eb51c82';
-    const CORS_PROXY = 'https://corsproxy.io/?';  // Free CORS bypass
+    <!-- RANDOM MODE (COLLAPSIBLE) -->
+    <div id="randomMode">
+      <div class="collapsible-header" onclick="toggleCollapse(this)">
+        Filters
+      </div>
+      <div class="collapsible-content">
+        <label>Number of Decks:</label>
+        <select id="numDecks">
+          <option value="1">1 Deck</option>
+          <option value="2">2 Decks</option>
+        </select>
 
-    // Full Errata Database
-    const ERRATA = {
-      "Arcenomometer": "Enhance two. Action: During your opponent’s next turn, each time they play a card, they lose 1 Aember.",
-      "Auto-Legionary": "Action: Put Auto-Legionary on a flank of your battleline. While in the battleline, it is considered a creature with 5 power and may be used as if it belonged to the active house.",
-      "Bait and Switch": "Play: If your opponent has more Aember than you, steal 1 Aember. Repeat the preceding effect if your opponent still has more Aember than you.",
-      "Biomatrix Backup": "This creature gains, 'Destroyed: Put this creature into its owner’s archives.'",
-      "Cauldron": "Omni: Put the top card of your deck faceup under Cauldron. If there are 3 or more cards under Cauldron, play them one at a time as if they were in your hand.",
-      "Collector Worm": "After Fight: Put the creature Collector Worm fights into your archives. (Both creatures must survive the fight.) If that creature leaves your archives, put it in its owner’s hand instead.",
-      "Corner the Market": "Play: During your opponent’s next turn, they cannot play cards, and each time they discard a card from their hand, they may archive that card from their discard pile.",
-      "Curse of Forgetfulness (Anomaly)": "Treachery. (This card enters play under your opponent's control.) At the end of your turn, purge the top card in your discard pile.",
-      "Custom Virus": "Omni: Destroy Custom Virus. You may purge a creature from your hand. If you do, destroy each creature that shares a trait with the purged creature.",
-      "Drummernaut": "Play/Fight/Reap: Return another friendly Giant creature to your hand.",
-      "Duskwitch": "Omega. Elusive. Your creatures enter play ready.",
-      "Ecto-Charge": "Play: Forge a key at +20 Aember current cost, reduced by 1 Aember for each card in your discard pile (to a minimum of 6). If you do, purge Ecto-Charge.",
-      "Experimental Therapy": "This creature may be used as if it belonged to the active house. Play: Stun and exhaust this creature.",
-      "Glimmerspore": "Play: Put an artifact from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
-      "Incubation Chamber": "Omni: You may reveal a Mars creature from your hand. If you do, archive it.",
-      "Into the Warp": "Play: Each player discards the top card of their deck. Destroy each creature that shares a house with at least one of the discarded cards.",
-      "Keyforgery": "When your opponent would forge a key on their turn, that player names a house. Reveal a random card from your hand. If that card is not of the named house, destroy Keyforgery and they do not forge that key (no Aember is spent).",
-      "Library Access": "Play: For the remainder of the turn, each time you play another card, draw a card. Purge Library Access.",
-      "Life for a Life": "Play: Destroy a friendly creature. If you do, deal 6 damage to a creature.",
-      "Magda the Rat": "Elusive. Play: Steal 2 Aember. If Magda the Rat leaves play, your opponent steals 2 Aember.",
-      "Missile Officer Myers": "Deploy. Play/Reap: Resolve the play effect of a neighboring creature as if you had just played it. Scrap: You may play 1 card that is not of the active house during your turn.",
-      "Offering to Kiligog": "Omni: Destroy a friendly creature. If you do, choose a creature in your discard pile. Place it facedown under Offering to Kiligog. Omni: Make each card under Offering to Kiligog a token creature as if the card was on top of your deck.",
-      "Pain Reaction": "Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature's neighbors after it leaves play.",
-      "Ragatha": "Treachery. After an enemy creature reaps, deal 3 damage to each of Ragatha's neighbors.",
-      "Sample 42-C": "Action: Move 1 Aember from your opponent's pool to Sample 42-C. If there are 4 Aember or more on Sample 42-C, forge a key at no cost and purge Sample 42-C. Fate: The most powerful enemy creature captures half of your Aember (rounding down).",
-      "Scoop Up": "Play: Put a friendly non-Mars creature and an enemy non-Mars creature into your archives. If either card leaves your archives and you are not the owner of it, put it into its owner's hand instead.",
-      "Shrink-ray Technician": "After Reap: Choose an enemy creature. It gets -2 power until the end of the turn. Scrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
-      "Space Invaders": "Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
-      "Tendrils of Pain": "Play: Deal 1 damage to each creature. Deal 4 damage to each creature instead if your opponent forged a key on their previous turn.",
-      "Yipyax Abductor": "Play/Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner's hand instead.",
-      "Yzphyz Knowdrone": "Play: Archive a card. You may purge an archived card. If you do, stun a creature."
-    };
+        <label>SAS Range:</label>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="number" id="sasMinInput" placeholder="Min" style="flex:1">
+          <span style="width:20px;text-align:center;">–</span>
+          <input type="number" id="sasMaxInput" placeholder="Max" style="flex:1">
+        </div>
+        <div class="help">Leave blank for full range</div>
 
-    async function fetchWithProxy(url, options = {}) {
-      const proxiedUrl = CORS_PROXY + encodeURIComponent(url);
-      try {
-        const res = await fetch(proxiedUrl, {
-          ...options,
-          headers: {
-            ...options.headers,
-            'Api-Key': API_KEY  // Proxy passes this through
-          }
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res;
-      } catch (e) {
-        throw new Error(`Fetch failed: ${e.message}`);
-      }
-    }
+        <div id="diffControl" style="display:none;margin-top:10px;">
+          <label>Max SAS Difference:</label>
+          <input type="number" id="maxDiffInput" min="0" max="30" value="5">
+        </div>
 
-    async function loadUserDecks() {
-      const username = usernameInput.value.trim();
-      if (!username) return status.textContent = 'Enter a username';
-
-      status.textContent = 'Loading decks...';
-      status.className = '';
-      decksList.style.display = 'block';
-      document.getElementById('decks').innerHTML = '';
-
-      try {
-        // Proxy the API call
-        const res = await fetchWithProxy(`https://decksofkeyforge.com/public-api/v3/decks?owner=${encodeURIComponent(username)}&per_page=100`);
-        const data = await res.json();
-
-        if (!data.decks || data.decks.length === 0) {
-          document.getElementById('user-decks-count').textContent = 'No decks found for this user.';
-          status.textContent = 'Try importing decks to DoK via Master Vault.';
-          status.className = 'error';
-          return;
-        }
-
-        document.getElementById('user-decks-count').textContent = `${data.decks.length} decks loaded`;
-        data.decks.forEach(deck => {
-          const div = document.createElement('div');
-          div.className = 'deck';
-          div.onclick = () => loadDeckDetail(deck.id);
-          div.innerHTML = `<h3>${deck.name}</h3><p>${deck.expansion?.name || 'Unknown'} | ID: ${deck.id.slice(-8)}</p>`;
-          document.getElementById('decks').appendChild(div);
-        });
-
-        status.textContent = 'Tap a deck to view cards';
-      } catch (e) {
-        document.getElementById('user-decks-count').textContent = 'Load failed';
-        status.textContent = `Error: ${e.message}. Check username or API key.`;
-        status.className = 'error';
-        console.error(e);
-      }
-    }
-
-    async function loadDeckDetail(uuid) {
-      status.textContent = 'Loading deck...';
-      deckDetail.style.display = 'block';
-      decksList.style.display = 'none';
-      document.getElementById('cards').innerHTML = '';
-
-      try {
-        const res = await fetchWithProxy(`https://decksofkeyforge.com/public-api/v3/decks/${uuid}`);
-        const data = await res.json();
-
-        document.getElementById('deck-name').textContent = data.deck.name || 'Unknown Deck';
-
-        data._linked.cards.forEach(card => {
-          const div = document.createElement('div');
-          div.className = 'card';
-          const hasErrata = ERRATA[card.title];
-          div.innerHTML = `
-            <img src="${card.image_url}" alt="${card.title}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iODQiIHZpZXdCb3g9IjAgMCA2MCA4NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAiIGhlaWdodD0iODQiIGZpbGw9IiMyMjIiLz48dGV4dCB4PSIzMCIgeT0iNDIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIiBmaWxsPSIjOTk5IiBmb250LXNpemU9IjEyIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4='">
-            <div>
-              <div class="card-title">${card.title}</div>
-              <div class="card-house">${card.house}</div>
-              ${hasErrata ? '<div class="errata">ERRATA → Tap to view</div>' : ''}
+        <div class="filter-grid">
+          <div class="filter-col">
+            <label>Sets:</label>
+            <div style="display:flex;gap:5px;">
+              <button class="btn-small btn-success" onclick="selectAll('sets')">All</button>
+              <button class="btn-small" onclick="clearAll('sets')">Clear</button>
             </div>
-          `;
-          if (hasErrata) {
-            div.style.cursor = 'pointer';
-            div.onclick = (e) => {
-              e.stopPropagation();
-              showErrata(card.title);
-            };
+            <select id="sets" multiple></select>
+          </div>
+          <div class="filter-col">
+            <label>Houses:</label>
+            <div style="display:flex;gap:5px;">
+              <button class="btn-small btn-success" onclick="selectAll('houses')">All</button>
+              <button class="btn-small" onclick="clearAll('houses')">Clear</button>
+            </div>
+            <select id="houses" multiple></select>
+          </div>
+        </div>
+
+        <button id="selectBtn" disabled style="margin-top:20px;font-size:18px;padding:14px;" onclick="pickDecks()">
+          Select Random Deck(s)
+        </button>
+      </div>
+    </div>
+
+    <!-- MANUAL MODE -->
+    <div id="manualMode" style="display:none;">
+      <label>Select Deck:</label>
+      <select id="manualDeckList" size="10" class="manual-deck-list"></select>
+      <button id="showManualBtn" disabled style="margin-top:10px;" onclick="showManualDeck()">Show Deck</button>
+    </div>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+/* --------------------------------------------------------------
+   COLLAPSE TOGGLE
+   -------------------------------------------------------------- */
+function toggleCollapse(header){
+  const content = header.nextElementSibling;
+  const parent = header.parentElement;
+  parent.classList.toggle('collapsed');
+}
+
+/* --------------------------------------------------------------
+   FULL ERRATA
+   -------------------------------------------------------------- */
+const ERRATA = {
+  "Ragatha":`Treachery.\nAfter an enemy creature reaps, deal 3 damage to each of Ragatha’s neighbors.`,
+  "Sample 42-C":`Action: Move 1 AEmber from your opponent’s pool to Sample 42-C. If there are 4 AEmber or more on Sample 42-C, forge a key at no cost and purge Sample 42-C.\nFate: The most powerful enemy creature captures half of your AEmber (rounding down).`,
+  "Arcenomometer":"Enhance [AEmber][AEmber]\n[AEmber][AEmber]. (These icons have already been added to cards in your deck.)\nAction: During your opponent’s next turn, each time they play a card, they lose 1[AEmber].",
+  "Auto-Legionary":"Action: Put Auto-Legionary on a flank of your battleline. While in the battleline, it is considered a creature with 5 power and may be used as if it belonged to the active house.",
+  "Bait and Switch":"Play: If your opponent has more [AEmber] than you, steal 1[AEmber]. Repeat the preceding effect if your opponent still has more [AEmber] than you.",
+  "Biomatrix Backup":"This creature gains,”Destroyed: Put this creature into its owner’s archives.”",
+  "Cauldron":"Omni: Put the top card of your deck faceup under Cauldron. If there are 3 or more cards under Cauldron, play them one at a time as if they were in your hand.",
+  "Collector Worm":"After Fight: Put the creature Collector Worm fights into your archives. (Both creatures must survive the fight.) If that creature leaves your archives, put it in its owner’s hand instead.",
+  "Corner the Market":"Play: During your opponent\'s next turn, they cannot play cards, and each time they discard a card from their hand, they may archive that card from their discard pile.",
+  "Curse of Forgetfulness":"Treachery. (This card enters play under your opponent\'s control.)\nAt the end of your turn, purge the top card in your discard pile.",
+  "Custom Virus":"Omni: Destroy Custom Virus. You may purge a creature from your hand. If you do, destroy each creature that shares a trait with the purged creature.",
+  "Drummernaut":"Play/After Fight/After Reap: Return another friendly Giant creature to your hand.",
+  "Duskwitch":"Omega. Elusive.\nYour creatures enter play ready.",
+  "Ecto-Charge":"Play: Forge a key at +20[AEmber] current cost, reduced by 1[AEmber] for each card in your discard pile (to a minimum of 6). If you do, purge Ecto-Charge.",
+  "Experimental Therapy":"This creature may be used as if it belonged to the active house.\nPlay: Stun and exhaust this creature.",
+  "Glimmerspore":"Play: Put an artifact from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+  "Incubation Chamber":"Omni: You may reveal a Mars creature from your hand. If you do, archive it.",
+  "Into the Warp":"Play: Each player discards the top card of their deck. Destroy each creature that shares a house with at least one of the discarded cards.",
+  "Keyforgery":"When your opponent would forge a key on their turn, that player names a house. Reveal a random card from your hand. If that card is not of the named house, destroy Keyforgery and they do not forge that key (no [AEmber] is spent).",
+  "Library Access":"Play: For the remainder of the turn, each time you play another card, draw a card. Purb Library Access.",
+  "Life for a Life":"Play: Destroy a friendly creature. If you do, deal 6 damage to a creature.",
+  "Magda the Rat":"Elusive.\nPlay: Steal 2[AEmber]. If Magda the Rat leaves play, your opponent steals 2[AEmber].",
+  "Missile Officer Myers":"Deploy.\nPlay/After Reap: Resolve the play effect of a neighboring creature as if you had just played it.\nScrap: You may play 1 card that is not of the active house during your turn.",
+  "Offering to Kiligog":"The second “Omni:” ability should read:\nOmni: Make each card under Offering to Killigog a token creature as if the card was on top of your deck.",
+  "Pain Reaction":"Play: Deal 2 damage to an enemy creature. If this damage destroys that creature, deal 2 damage to each of that creature’s neighbors after it leaves play.",
+  "Shrink-ray Technician":"After Reap: Choose an enemy creature. It gets –2 power until the end of the turn.\nScrap: Choose the most powerful enemy creature. Until the end of the turn, that creature is considered to have 1 power and 0 armor.",
+  "Space Invaders":"Play: Reveal any number of creatures from your hand. Make each creature revealed this way a token creature as if the card was on top of your deck.",
+  "Tendrils of Pain":"Play: Deal 1 damage to each creature. Deal 4 damage to each creature instead if your opponent forged a key on their previous turn.",
+  "Yipyax Abductor":"Play/After Fight: Put an upgrade from play into your archives. If you are not the owner of that card and it leaves your archives, put it into its owner’s hand instead.",
+  "Yzphyz Knowdrone":"Play: Archive a card. You may purge an archived card. If you do, stun a creature."
+};
+
+/* --------------------------------------------------------------
+   GLOBAL DATA
+   -------------------------------------------------------------- */
+let data = [], sets = new Set(), houses = new Set();
+let minSAS = Infinity, maxSAS = -Infinity;
+
+/* --------------------------------------------------------------
+   CSV PARSER
+   -------------------------------------------------------------- */
+function parseCSV(text){
+  const rows = [];
+  let cur = '', inQ = false, field = '';
+  for(let i=0;i<text.length;i++){
+    const ch = text[i], next = text[i+1];
+    if(ch==='"' && text[i-1]!=='\\'){
+      if(inQ && next==='"'){ field+='"'; i++; }
+      else inQ = !inQ;
+    }else if(ch===',' && !inQ){
+      cur += field.trim() + '|';
+      field = '';
+    }else if(ch==='\n' && !inQ){
+      cur += field.trim();
+      rows.push(cur);
+      cur = ''; field = '';
+    }else field += ch;
+  }
+  if(field) cur += field.trim();
+  if(cur) rows.push(cur);
+  return rows;
+}
+
+/* --------------------------------------------------------------
+   LOAD CSV
+   -------------------------------------------------------------- */
+fetch('decks_data_fixed.csv')
+  .then(r=>r.text())
+  .then(text=>{
+    const rows = parseCSV(text).slice(1);
+    data = rows.map(r=>{
+      const c = r.split('|');
+      const uuid = c[0].trim();
+      const name = c[1].replace(/^"|"$/g,'').replace(/""/g,'"').trim();
+      const set  = c[2].trim();
+      const housesStr = c[3].trim();
+      const sas = parseInt(c[4]);
+      const cardsStr = c[8].trim();
+
+      const houseList = housesStr.split(',').map(h=>h.trim().toLowerCase());
+      houseList.forEach(h=>houses.add(h));
+      sets.add(set);
+
+      minSAS = Math.min(minSAS, sas);
+      maxSAS = Math.max(maxSAS, sas);
+
+      let cards = {};
+      try{
+        let s = cardsStr.replace(/^"|"$/g, '').trim();
+        s = s.replace(/\\"/g, '"');
+        s = s.replace(/""([^""]+)""(?=:|\s*\[)/g, '"$1"');
+        if(s.startsWith('{') && s.endsWith('}')){
+          cards = JSON.parse(s);
+        }else{
+          const re = /"([^"]+)":\s*\[([^\]]*)\]/g;
+          let m;
+          while((m=re.exec(s))!==null){
+            const h = m[1].trim();
+            const list = m[2].replace(/"/g,'').split(',').map(x=>x.trim()).filter(x=>x);
+            cards[h] = list;
+            houses.add(h.toLowerCase());
           }
-          document.getElementById('cards').appendChild(div);
-        });
-
-        status.textContent = '';
-      } catch (e) {
-        document.getElementById('deck-name').textContent = 'Error';
-        document.getElementById('cards').innerHTML = '<p class="error">Deck not found. Try importing to DoK.</p>';
-        status.textContent = `Error: ${e.message}`;
-        status.className = 'error';
+        }
+      }catch(e){
+        console.warn('Card parse failed for', name, e);
+        cards = {"ERROR":["Parse failed"]};
       }
-    }
 
-    function showErrata(title) {
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999;';
-      modal.innerHTML = `
-        <div class="errata-text" style="max-width:500px;">
-          <h3 style="margin-top:0;">${title} (Errata)</h3>
-          <p>${ERRATA[title]}</p>
-          <button onclick="this.closest('div').remove()" style="margin-top:16px;padding:10px 20px;background:#c00;color:white;border:none;border-radius:8px;">Close</button>
+      return {uuid,name,set,housesStr,houseList,sas,cards};
+    });
+
+    document.getElementById('loading').textContent = `Loaded ${data.length} decks.`;
+    document.getElementById('selectBtn').disabled = false;
+    document.getElementById('showManualBtn').disabled = false;
+
+    document.getElementById('sasMinInput').placeholder = minSAS;
+    document.getElementById('sasMaxInput').placeholder = maxSAS;
+
+    fillFilters();
+    fillManualList();
+  })
+  .catch(err=>{
+    console.error(err);
+    document.getElementById('loading').innerHTML = `
+      <span style="color:#ff5252">
+        Failed to load <b>decks_data_fixed.csv</b>.<br>
+        Run via a local server:<br>
+        <code>python -m http.server 8000</code>
+      </span>`;
+  });
+
+/* --------------------------------------------------------------
+   FILTER UI
+   -------------------------------------------------------------- */
+function fillFilters(){
+  const setSel = document.getElementById('sets');
+  const houseSel = document.getElementById('houses');
+  setSel.innerHTML = houseSel.innerHTML = '';
+
+  [...sets].sort().forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s; o.textContent=s;
+    setSel.appendChild(o);
+  });
+  [...houses].sort().forEach(h=>{
+    const o=document.createElement('option');
+    o.value=h; o.textContent=h.charAt(0).toUpperCase()+h.slice(1);
+    houseSel.appendChild(o);
+  });
+}
+
+/* --------------------------------------------------------------
+   MANUAL DECK LIST – ALPHABETICAL
+   -------------------------------------------------------------- */
+function fillManualList(){
+  const list = document.getElementById('manualDeckList');
+  list.innerHTML = '';
+  const sorted = [...data].sort((a,b)=>a.name.localeCompare(b.name));
+  sorted.forEach(d=>{
+    const opt = document.createElement('option');
+    opt.value = d.uuid;
+    opt.textContent = `${d.name} (SAS: ${d.sas})`;
+    list.appendChild(opt);
+  });
+}
+
+/* --------------------------------------------------------------
+   MODE SWITCH
+   -------------------------------------------------------------- */
+document.querySelectorAll('input[name="mode"]').forEach(r=>{
+  r.addEventListener('change',()=>{
+    const mode = r.value;
+    document.getElementById('randomMode').style.display = mode==='random'?'block':'none';
+    document.getElementById('manualMode').style.display = mode==='manual'?'block':'none';
+  });
+});
+
+/* --------------------------------------------------------------
+   UI helpers
+   -------------------------------------------------------------- */
+function selectAll(id){ const s=document.getElementById(id); for(let o of s.options) o.selected=true; }
+function clearAll(id){ const s=document.getElementById(id); for(let o of s.options) o.selected=false; }
+
+document.getElementById('numDecks').addEventListener('change',()=>{
+  document.getElementById('diffControl').style.display = 
+    document.getElementById('numDecks').value==='2' ? 'block':'none';
+});
+
+/* --------------------------------------------------------------
+   RANDOM SELECTION
+   -------------------------------------------------------------- */
+function pickDecks(){
+  const num = +document.getElementById('numDecks').value;
+  const minInput = document.getElementById('sasMinInput').value;
+  const maxInput = document.getElementById('sasMaxInput').value;
+  const min = minInput ? +minInput : minSAS;
+  const max = maxInput ? +maxInput : maxSAS;
+  const selSets = Array.from(document.getElementById('sets').selectedOptions).map(o=>o.value);
+  const selHouses = Array.from(document.getElementById('houses').selectedOptions).map(o=>o.value.toLowerCase());
+  const diff = num===2 ? +document.getElementById('maxDiffInput').value : 0;
+
+  let pool = data.filter(d=>
+    d.sas>=min && d.sas<=max &&
+    (selSets.length===0 || selSets.includes(d.set)) &&
+    (selHouses.length===0 || selHouses.every(h=>d.houseList.includes(h)))
+  );
+
+  if(pool.length<num){
+    document.getElementById('results').innerHTML = `<p style="color:#ff5252;text-align:center;">Not enough decks (found ${pool.length}, need ${num})</p>`;
+    return;
+  }
+
+  let chosen = [];
+  if(num===1){
+    chosen = [pool[Math.floor(Math.random()*pool.length)]];
+  }else{
+    let tries=0;
+    while(tries<2000){
+      const a=pool[Math.floor(Math.random()*pool.length)];
+      const b=pool[Math.floor(Math.random()*pool.length)];
+      if(a.uuid!==b.uuid && Math.abs(a.sas-b.sas)<=diff){
+        chosen=[a,b];
+        break;
+      }
+      tries++;
+    }
+    if(chosen.length===0){
+      document.getElementById('results').innerHTML = `<p style="color:#ff5252">Could not find 2 decks within SAS diff ${diff}</p>`;
+      return;
+    }
+  }
+  renderDecks(chosen);
+}
+
+/* --------------------------------------------------------------
+   MANUAL DECK DISPLAY
+   -------------------------------------------------------------- */
+function showManualDeck(){
+  const uuid = document.getElementById('manualDeckList').value;
+  const deck = data.find(d=>d.uuid===uuid);
+  if(deck) renderDecks([deck]);
+}
+
+/* --------------------------------------------------------------
+   RENDER DECKS – ONE COLUMN PER HOUSE
+   -------------------------------------------------------------- */
+function renderDecks(decks){
+  const out=document.getElementById('results');
+  out.innerHTML='';
+
+  decks.forEach((d,i)=>{
+    const div=document.createElement('div');
+    div.className='deck';
+    div.innerHTML=`
+      <h2>${d.name}</h2>
+      <p><strong>Set:</strong> ${d.set} | <strong>SAS:</strong> ${d.sas} | <strong>Houses:</strong> ${d.housesStr}</p>
+      <div class="links">
+        <a href="https://decksofkeyforge.com/decks/${d.uuid}" target="_blank">Decks of Keyforge</a>
+        <a href="https://www.keyforgegame.com/deck-details/${d.uuid}" target="_blank">Master Vault</a>
+      </div>
+    `;
+
+    const houseContainer = document.createElement('div');
+    houseContainer.style.display = 'flex';
+    houseContainer.style.gap = '30px';
+    houseContainer.style.flexWrap = 'wrap';
+    houseContainer.style.justifyContent = 'center';
+
+    Object.entries(d.cards).forEach(([house,cards])=>{
+      const hLow = house.toLowerCase();
+
+      const houseDiv = document.createElement('div');
+      houseDiv.style.flex = '1 1 300px';
+      houseDiv.style.minWidth = '250px';
+      houseDiv.innerHTML = `
+        <div class="house">
+          <img src="icons/${hLow}.png" alt="${house}" onerror="this.src='icons/default.png'">
+          <h3>${house}</h3>
+        </div>
+        <div class="house-cards">
+          ${cards.length===0 ? '<div class="card">(no cards)</div>' : 
+            cards.map(c=>`
+              <div class="card">
+                ${ERRATA[c] ? `<span class="errata">${c}</span><br><small>${ERRATA[c].replace(/\n/g,'<br>')}</small>` : c}
+              </div>
+            `).join('')
+          }
         </div>
       `;
-      document.body.appendChild(modal);
-    }
+      houseContainer.appendChild(houseDiv);
+    });
 
-    function backToList() {
-      deckDetail.style.display = 'none';
-      decksList.style.display = 'block';
-    }
-
-    // Auto-load your decks on startup
-    window.addEventListener('load', () => setTimeout(loadUserDecks, 500));  // Slight delay for render
-  </script>
+    div.appendChild(houseContainer);
+    out.appendChild(div);
+  });
+}
+</script>
 </body>
 </html>
